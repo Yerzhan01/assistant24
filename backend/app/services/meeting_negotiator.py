@@ -163,7 +163,6 @@ class MeetingNegotiator:
         Find available time slots.
         TODO: Integrate with actual calendar/meetings to check availability.
         """
-        """
         tz = pytz.timezone("Asia/Almaty")
         now = datetime.now(tz)
         slots = []
