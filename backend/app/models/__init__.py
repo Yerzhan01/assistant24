@@ -17,6 +17,7 @@ from app.models.invoice import Invoice
 from app.models.whatsapp_instance import WhatsAppInstance, InstanceStatus
 from app.models.chat import Message
 from app.models.trace import Trace
+from app.models.idea import Idea
 
 __all__ = [
     "Tenant",
@@ -36,4 +37,5 @@ __all__ = [
     "InstanceStatus",
     "Message",
     "Trace",
+    "Idea",
 ]
