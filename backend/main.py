@@ -102,7 +102,13 @@ async def global_exception_handler(request: Request, exc: Exception):
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=[
+        "https://link-it.tech",
+        "https://www.link-it.tech",
+        "https://dev.link-it.tech",
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
