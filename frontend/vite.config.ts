@@ -6,6 +6,7 @@ export default defineConfig({
     server: {
         port: 3000,
         host: true,
+        allowedHosts: ['dev.link-it.tech', 'link-it.tech', 'www.link-it.tech'],
         proxy: {
             '/api': {
                 target: 'http://backend:8000',
