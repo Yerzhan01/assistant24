@@ -1,6 +1,20 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { Send, MessageCircle, Globe, Bot, Loader2, CheckCircle, XCircle } from 'lucide-react'
+import { Send, MessageCircle, Globe, Bot, Loader2, CheckCircle } from 'lucide-react'
+
+interface WhatsAppStatus {
+    connected: boolean
+    state: string
+    phone?: string
+    instance_id?: string
+    message: string
+}
+
+interface WhatsAppQR {
+    state: string
+    qr: string | null
+    message: string
+}
 
 export default function Settings() {
     const { t, token, tenant, language, setLanguage } = useAuth()
@@ -19,10 +33,67 @@ export default function Settings() {
     const [waError, setWaError] = useState('')
     const [waSuccess, setWaSuccess] = useState(false)
 
+    // WhatsApp Real Status
+    const [waRealStatus, setWaRealStatus] = useState<WhatsAppStatus | null>(null)
+    const [waStatusLoading, setWaStatusLoading] = useState(false)
+    const [waQrData, setWaQrData] = useState<WhatsAppQR | null>(null)
+    const [waQrLoading, setWaQrLoading] = useState(false)
+
     // AI
     const [aiEnabled, setAiEnabled] = useState(tenant?.ai_enabled ?? true)
     const [aiKey, setAiKey] = useState('')
     const [aiLoading, setAiLoading] = useState(false)
+
+    // Check WhatsApp real status on load
+    useEffect(() => {
+        if (tenant?.whatsapp_connected) {
+            checkWhatsAppStatus()
+        }
+    }, [tenant?.whatsapp_connected])
+
+    const checkWhatsAppStatus = async () => {
+        setWaStatusLoading(true)
+        try {
+            const res = await fetch('/api/v1/settings/whatsapp/status', {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            if (res.ok) {
+                const data = await res.json()
+                setWaRealStatus(data)
+                // If not authorized, auto-fetch QR
+                if (data.state === 'notAuthorized') {
+                    getWhatsAppQR()
+                }
+            }
+        } catch (err) {
+            console.error('Failed to check WhatsApp status:', err)
+        } finally {
+            setWaStatusLoading(false)
+        }
+    }
+
+    const getWhatsAppQR = async () => {
+        setWaQrLoading(true)
+        try {
+            const res = await fetch('/api/v1/settings/whatsapp/qr', {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            if (res.ok) {
+                const data = await res.json()
+                setWaQrData(data)
+                // If authorized, update status
+                if (data.state === 'authorized') {
+                    setWaRealStatus(prev => prev ? { ...prev, connected: true, state: 'authorized' } : null)
+                    setWaQrData(null)
+                }
+            }
+        } catch (err) {
+            console.error('Failed to get QR code:', err)
+        } finally {
+            setWaQrLoading(false)
+        }
+    }
+
 
     const connectTelegram = async () => {
         setTgLoading(true)
@@ -221,22 +292,82 @@ export default function Settings() {
                         <h2 className="text-lg font-semibold text-white">{t('settings.whatsapp.title')}</h2>
                         <p className="text-sm text-gray-400">{t('settings.whatsapp.description')}</p>
                     </div>
-                    {tenant?.whatsapp_connected && (
+                    {waRealStatus?.connected && (
                         <CheckCircle className="w-5 h-5 text-green-400 ml-auto" />
                     )}
                 </div>
 
-                {tenant?.whatsapp_connected ? (
-                    <div className="flex items-center justify-between p-4 bg-green-500/10 rounded-xl border border-green-500/30">
-                        <span className="text-green-400">✅ {t('settings.whatsapp.connected')}</span>
+                {/* Real Status Display */}
+                {waStatusLoading ? (
+                    <div className="flex items-center gap-2 p-4 bg-gray-700/50 rounded-xl mb-4">
+                        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                        <span className="text-gray-400">Проверка статуса...</span>
+                    </div>
+                ) : waRealStatus && (
+                    <div className={`p-4 rounded-xl mb-4 ${waRealStatus.connected
+                        ? 'bg-green-500/10 border border-green-500/30'
+                        : waRealStatus.state === 'notConfigured'
+                            ? 'bg-gray-700/50'
+                            : 'bg-yellow-500/10 border border-yellow-500/30'
+                        }`}>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <span className={waRealStatus.connected ? 'text-green-400' : waRealStatus.state === 'notConfigured' ? 'text-gray-400' : 'text-yellow-400'}>
+                                    {waRealStatus.connected ? '✅ Авторизован в WhatsApp' :
+                                        waRealStatus.state === 'notConfigured' ? '⚪ Не настроен' :
+                                            waRealStatus.state === 'notAuthorized' ? '⚠️ Требуется сканирование QR' :
+                                                `⚠️ ${waRealStatus.message}`}
+                                </span>
+                                {waRealStatus.phone && (
+                                    <p className="text-sm text-gray-500 mt-1">📱 {waRealStatus.phone}</p>
+                                )}
+                            </div>
+                            {tenant?.whatsapp_connected && (
+                                <button
+                                    onClick={disconnectWhatsApp}
+                                    className="text-sm text-red-400 hover:text-red-300"
+                                >
+                                    {t('settings.whatsapp.disconnect')}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* QR Code Display */}
+                {waQrData?.qr && !waRealStatus?.connected && (
+                    <div className="mb-6 p-4 bg-white rounded-xl flex flex-col items-center">
+                        <p className="text-gray-800 font-medium mb-3">Отсканируйте QR-код в WhatsApp</p>
+                        <img
+                            src={`data:image/png;base64,${waQrData.qr}`}
+                            alt="WhatsApp QR Code"
+                            className="w-64 h-64"
+                        />
+                        <p className="text-sm text-gray-500 mt-2">Откройте WhatsApp → Связанные устройства → Привязать устройство</p>
                         <button
-                            onClick={disconnectWhatsApp}
-                            className="text-sm text-red-400 hover:text-red-300"
+                            onClick={checkWhatsAppStatus}
+                            className="mt-3 text-sm text-blue-500 hover:text-blue-600 flex items-center gap-1"
                         >
-                            {t('settings.whatsapp.disconnect')}
+                            <Loader2 className={`w-3 h-3 ${waQrLoading ? 'animate-spin' : ''}`} />
+                            Обновить QR
                         </button>
                     </div>
-                ) : (
+                )}
+
+                {/* Get QR Button when notAuthorized but no QR yet */}
+                {waRealStatus?.state === 'notAuthorized' && !waQrData?.qr && (
+                    <button
+                        onClick={getWhatsAppQR}
+                        disabled={waQrLoading}
+                        className="mb-4 px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-xl transition-colors flex items-center gap-2"
+                    >
+                        {waQrLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                        📱 Получить QR-код
+                    </button>
+                )}
+
+                {/* Configuration Form */}
+                {!tenant?.whatsapp_connected && (
                     <div className="space-y-4">
                         {waError && (
                             <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
@@ -246,7 +377,7 @@ export default function Settings() {
 
                         {waSuccess && (
                             <div className="p-3 bg-green-500/20 border border-green-500/50 rounded-lg text-green-400 text-sm">
-                                ✅ {t('settings.whatsapp.connected')}
+                                ✅ Настройки сохранены! Проверьте статус выше.
                             </div>
                         )}
 
