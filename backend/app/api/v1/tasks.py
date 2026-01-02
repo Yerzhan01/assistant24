@@ -34,7 +34,21 @@ class TaskUpdate(BaseModel):
     assignee_id: Optional[str] = None
 
 
-@router.get("/tasks")
+
+class TaskResponse(BaseModel):
+    id: str
+    title: str
+    description: str
+    priority: str
+    status: str
+    due_date: Optional[str] = None
+    assignee_id: Optional[str] = None
+    created_at: str
+
+class TaskListResponse(BaseModel):
+    tasks: List[TaskResponse]
+
+@router.get("/tasks", response_model=TaskListResponse)
 async def list_tasks(
     status: Optional[str] = None,
     tenant: Tenant = Depends(get_current_tenant),
@@ -51,13 +65,17 @@ async def list_tasks(
     result = await db.execute(query)
     tasks = result.scalars().all()
     
+    # helper to convert strings safely
+    def to_str(val):
+        return str(val) if val is not None else None
+
     return {"tasks": [
         {
             "id": str(t.id),
-            "title": t.title,
-            "description": t.description or "",
-            "priority": t.priority,
-            "status": t.status,
+            "title": str(t.title),
+            "description": str(t.description) if t.description else "",
+            "priority": str(t.priority),
+            "status": str(t.status),
             "due_date": t.deadline.isoformat() if t.deadline else None,
             "assignee_id": str(t.assignee_id) if t.assignee_id else None,
             "created_at": t.created_at.isoformat() if t.created_at else ""
