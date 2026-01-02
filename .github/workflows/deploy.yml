@@ -51,10 +51,14 @@ jobs:
         # Configure Ports
         BACKEND_PORT=8000
         FRONTEND_PORT=3000
+        DB_PORT=5432
+        REDIS_PORT=6379
         
         if [[ "${{ env.ENV_NAME }}" == "dev" ]]; then
           BACKEND_PORT=8001
           FRONTEND_PORT=3001
+          DB_PORT=5433
+          REDIS_PORT=6380
         fi
 
         # Run Deployment
@@ -64,6 +68,8 @@ jobs:
           export ENV_NAME=${{ env.ENV_NAME }} && \
           export BACKEND_PORT=$BACKEND_PORT && \
           export FRONTEND_PORT=$FRONTEND_PORT && \
+          export DB_PORT=$DB_PORT && \
+          export REDIS_PORT=$REDIS_PORT && \
           # Ensure .env exists or Copy default
           if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || touch .env; fi && \
           # Append/Update ports in .env for docker compose to pick up if not passing via shell env (Compose v2 reads shell env)
