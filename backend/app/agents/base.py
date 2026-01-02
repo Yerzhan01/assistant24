@@ -158,7 +158,23 @@ class BaseAgent(ABC):
                 )
             
             # Otherwise it's text
-            return AgentResponse(content=response.text)
+            # Otherwise it's text, but check if it contains "Action:" pattern (CoT fallback)
+            content_text = response.text
+            import re
+            action_match = re.search(r"Action:\s*([\w_]+)", content_text)
+            
+            if action_match:
+                tool_name = action_match.group(1).strip()
+                logger.info(f"detected text-based action: {tool_name}")
+                return AgentResponse(
+                    content=content_text, # Keep thought process
+                    tool_calls=[{
+                        "name": tool_name,
+                        "args": {} # Text actions usually don't have args in this current prompt format, or strict CoT implies handoff
+                    }]
+                )
+
+            return AgentResponse(content=content_text)
             
         except Exception as e:
             logger.error(f"Agent {self.name} error: {e}")
