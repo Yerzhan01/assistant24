@@ -28,10 +28,13 @@ jobs:
         fi
 
     - name: Install SSH Key
-      uses: shimataro/ssh-key-action@v2
-      with:
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        known_hosts: ${{ secrets.KNOWN_HOSTS }}
+      run: |
+        mkdir -p ~/.ssh/
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        # Disable Strict Host Checking globally for this runner
+        echo "StrictHostKeyChecking no" >> ~/.ssh/config
+
 
     - name: Deploy to Server
       env:
@@ -40,10 +43,10 @@ jobs:
         PROJECT_PATH: /app/${{ env.ENV_NAME }}
       run: |
         # Create separate directories for dev and prod
-        ssh $USER@$HOST "mkdir -p $PROJECT_PATH"
+        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 $USER@$HOST "mkdir -p $PROJECT_PATH"
 
         # Transfer files (excluding unwanted) via rsync
-        rsync -avz -e "ssh -o StrictHostKeyChecking=no" --exclude '.git' --exclude 'venv' --exclude 'node_modules' --exclude '__pycache__' ./ $USER@$HOST:$PROJECT_PATH/
+        rsync -avz -e "ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519" --exclude '.git' --exclude 'venv' --exclude 'node_modules' --exclude '__pycache__' ./ $USER@$HOST:$PROJECT_PATH/
 
         # Configure Ports
         BACKEND_PORT=8000
@@ -56,7 +59,7 @@ jobs:
 
         # Run Deployment
         # Using StrictHostKeyChecking=no to avoid known_hosts issues in CI
-        ssh -o StrictHostKeyChecking=no $USER@$HOST "cd $PROJECT_PATH && \
+        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 $USER@$HOST "cd $PROJECT_PATH && \
           export DOMAIN=${{ env.DOMAIN }} && \
           export ENV_NAME=${{ env.ENV_NAME }} && \
           export BACKEND_PORT=$BACKEND_PORT && \
