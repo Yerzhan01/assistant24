@@ -4,6 +4,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
+import pytz
 from uuid import UUID
 
 import google.generativeai as genai
@@ -130,7 +131,7 @@ class MeetingNegotiator:
             meeting_notes=meeting_notes,
             proposed_slots=[s.isoformat() for s in slots],
             whatsapp_chat_id=contact.whatsapp_chat_id,
-            expires_at=datetime.now() + timedelta(days=3)
+            expires_at=datetime.now(pytz.timezone("Asia/Almaty")) + timedelta(days=3)
         )
         
         self.db.add(negotiation)
@@ -162,7 +163,9 @@ class MeetingNegotiator:
         Find available time slots.
         TODO: Integrate with actual calendar/meetings to check availability.
         """
-        now = datetime.now()
+        """
+        tz = pytz.timezone("Asia/Almaty")
+        now = datetime.now(tz)
         slots = []
         
         # Generate slots for next weekdays at business hours

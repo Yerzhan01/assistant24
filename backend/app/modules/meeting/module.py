@@ -282,8 +282,8 @@ class MeetingModule(BaseModule):
             and_(
                 Meeting.tenant_id == tenant_id,
                 # Filter by approximate date (assume meeting is on the same day unless specified)
-                 Meeting.start_time >= datetime.combine(target_date, datetime.min.time()).astimezone(self.timezone),
-                 Meeting.start_time <= datetime.combine(target_date, datetime.max.time()).astimezone(self.timezone)
+                 Meeting.start_time >= self.timezone.localize(datetime.combine(target_date, datetime.min.time())),
+                 Meeting.start_time <= self.timezone.localize(datetime.combine(target_date, datetime.max.time()))
             )
         )
         
@@ -297,7 +297,7 @@ class MeetingModule(BaseModule):
                  # But database stores UTC/localized.
                  # Python filtering might be easier for small sets
                  pass
-             except:
+             except Exception:
                  pass
         
         # Add ordering: Most recently created first!

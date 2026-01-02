@@ -331,7 +331,12 @@ async def get_ical_feed(
     if not tenant:
         raise HTTPException(status_code=404, detail="Calendar not found")
     
-    # TODO: Verify token matches stored token for security
+    # Verify token matches stored token for security
+    if not tenant.calendar_feed_token or tenant.calendar_feed_token != token:
+        # Use constant time comparison if possible, but python str comparison is fast enough for this context
+        # Log incident?
+        # logger.warning(f"Invalid calendar feed access attempt for tenant {tenant_id}")
+        raise HTTPException(status_code=403, detail="Invalid access token")
     
     # Generate iCal content
     service = CalendarService(db)

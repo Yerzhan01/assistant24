@@ -126,6 +126,17 @@ export default function Chat() {
                 body: JSON.stringify({ message: messageText })
             })
 
+            if (!response.ok) {
+                let errorMessage = `Error: ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.detail || errorMessage;
+                } catch (e) {
+                    // ignore json parse error
+                }
+                throw new Error(errorMessage);
+            }
+
             const reader = response.body?.getReader()
             const decoder = new TextDecoder()
 

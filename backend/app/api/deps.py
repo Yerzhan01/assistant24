@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.tenant import Tenant
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Security scheme
@@ -33,7 +36,7 @@ async def get_current_tenant(
     # Decode token
     payload = decode_access_token(credentials.credentials)
     if not payload:
-        print("❌ Auth Failed: Invalid or expired token")
+        logger.warning("Auth Failed: Invalid or expired token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -42,7 +45,7 @@ async def get_current_tenant(
     
     tenant_id = payload.get("sub")
     if not tenant_id:
-        print("❌ Auth Failed: No sub in payload")
+        logger.warning("Auth Failed: No sub in payload")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload"
@@ -60,20 +63,20 @@ async def get_current_tenant(
     tenant = result.scalar_one_or_none()
     
     if not tenant:
-        print(f"❌ Auth Failed: Tenant {tenant_id} not found in DB")
+        logger.warning(f"Auth Failed: Tenant {tenant_id} not found in DB")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Tenant not found"
         )
     
     if not tenant.is_active:
-        print(f"❌ Auth Failed: Tenant {tenant_id} is inactive")
+        logger.warning(f"Auth Failed: Tenant {tenant_id} is inactive")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tenant is deactivated"
         )
     
-    print(f"🔑 API Request from Tenant: {tenant.id} ({tenant.email})")
+    # logger.info(f"API Request from Tenant: {tenant.id}")
     return tenant
 
 

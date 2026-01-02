@@ -7,6 +7,9 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Password hashing
@@ -48,5 +51,5 @@ def decode_access_token(token: str) ->Optional[ Dict[str, Any] ]:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
         return payload
     except JWTError as e:
-        print(f"❌ JWT Decode Error: {e}")
+        logger.error(f"JWT Decode Error: {e}")
         return None
