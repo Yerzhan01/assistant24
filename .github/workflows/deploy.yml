@@ -74,6 +74,8 @@ jobs:
           export GEMINI_API_KEY="AIzaSyC5GHxQHeJaFZsiNJmOjBos3-QJlu9fDKc" && \
           # Ensure .env exists or Copy default
           if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || touch .env; fi && \
-          # Append/Update ports in .env for docker compose to pick up if not passing via shell env (Compose v2 reads shell env)
+          # Create docker network if it doesn't exist
+          docker network create assistant-net 2>/dev/null || true && \
+          # Restart containers
           docker compose down && \
           docker compose up -d --build"
