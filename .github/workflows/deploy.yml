@@ -58,6 +58,7 @@ jobs:
         # Using StrictHostKeyChecking=no to avoid known_hosts issues in CI
         ssh -o StrictHostKeyChecking=no $USER@$HOST "cd $PROJECT_PATH && \
           export DOMAIN=${{ env.DOMAIN }} && \
+          export ENV_NAME=${{ env.ENV_NAME }} && \
           export BACKEND_PORT=$BACKEND_PORT && \
           export FRONTEND_PORT=$FRONTEND_PORT && \
           # Ensure .env exists or Copy default

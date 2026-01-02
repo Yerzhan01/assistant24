@@ -2,7 +2,7 @@ services:
   # PostgreSQL Database
   db:
     image: postgres:16-alpine
-    container_name: assistant24-db
+    container_name: assistant24-db-${ENV_NAME:-prod}
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -21,7 +21,7 @@ services:
   # Redis
   redis:
     image: redis:7-alpine
-    container_name: assistant24-redis
+    container_name: assistant24-redis-${ENV_NAME:-prod}
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -38,7 +38,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: assistant24-backend
+    container_name: assistant24-backend-${ENV_NAME:-prod}
     restart: unless-stopped
     ports:
       - "${BACKEND_PORT:-8000}:8000"
@@ -64,7 +64,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: assistant24-frontend
+    container_name: assistant24-frontend-${ENV_NAME:-prod}
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
@@ -84,7 +84,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: assistant24-celery-worker
+    container_name: assistant24-celery-worker-${ENV_NAME:-prod}
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/assistant24
@@ -105,7 +105,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: assistant24-celery-beat
+    container_name: assistant24-celery-beat-${ENV_NAME:-prod}
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/assistant24
