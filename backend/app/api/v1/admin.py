@@ -444,6 +444,195 @@ async def assign_instance_to_user(
     return instance.to_dict()
 
 
+@router.get("/whatsapp/instances/{instance_id}/status")
+async def get_instance_status(
+    instance_id: str,
+    current_tenant: Tenant = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get WhatsApp instance status from Green API.
+    
+    Returns:
+    - stateInstance: "notAuthorized", "authorized", "blocked", "sleepMode"
+    """
+    from app.services.whatsapp_bot import get_whatsapp_service
+    
+    instance = await db.get(WhatsAppInstance, instance_id)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    
+    try:
+        service = get_whatsapp_service()
+        state_response = await service.get_state_instance(
+            instance.instance_id,
+            instance.token
+        )
+        
+        state = state_response.get("stateInstance", "unknown")
+        
+        return {
+            "instance_id": instance.instance_id,
+            "db_id": instance_id,
+            "state": state,
+            "connected": state == "authorized",
+            "assigned_to": instance.assigned_to_tenant_id,
+            "message": _get_state_message_admin(state)
+        }
+    except Exception as e:
+        return {
+            "instance_id": instance.instance_id,
+            "state": "error",
+            "connected": False,
+            "message": f"Failed to check status: {str(e)}"
+        }
+
+
+@router.get("/whatsapp/instances/{instance_id}/qr")
+async def get_instance_qr(
+    instance_id: str,
+    current_tenant: Tenant = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get QR code for WhatsApp instance authorization.
+    
+    Returns base64 encoded QR code image if instance is not authorized.
+    """
+    from app.services.whatsapp_bot import get_whatsapp_service
+    
+    instance = await db.get(WhatsAppInstance, instance_id)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    
+    try:
+        service = get_whatsapp_service()
+        
+        # First check state
+        state_response = await service.get_state_instance(
+            instance.instance_id,
+            instance.token
+        )
+        state = state_response.get("stateInstance", "unknown")
+        
+        if state == "authorized":
+            return {
+                "instance_id": instance.instance_id,
+                "state": "authorized",
+                "qr": None,
+                "message": "Already authorized! QR code not needed."
+            }
+        
+        # Get QR code
+        qr_response = await service.get_qr(
+            instance.instance_id,
+            instance.token
+        )
+        
+        if qr_response.get("type") == "qrCode":
+            return {
+                "instance_id": instance.instance_id,
+                "state": state,
+                "qr": qr_response.get("message"),  # Base64 QR image
+                "message": "Scan this QR code with WhatsApp"
+            }
+        elif qr_response.get("type") == "alreadyLogged":
+            return {
+                "instance_id": instance.instance_id,
+                "state": "authorized",
+                "qr": None,
+                "message": "Already authorized!"
+            }
+        else:
+            return {
+                "instance_id": instance.instance_id,
+                "state": state,
+                "qr": None,
+                "message": qr_response.get("message", "Failed to get QR code")
+            }
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get QR code: {str(e)}"
+        )
+
+
+class UpdateInstanceRequest(BaseModel):
+    """Request to update instance credentials."""
+    instance_id: str
+    token: str
+
+
+@router.put("/whatsapp/instances/{db_instance_id}")
+async def update_instance_credentials(
+    db_instance_id: str,
+    request: UpdateInstanceRequest,
+    current_tenant: Tenant = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update WhatsApp instance with real credentials from Green API.
+    
+    Use this to replace mock instance_id and token with real ones.
+    """
+    from app.services.whatsapp_bot import get_whatsapp_service
+    
+    instance = await db.get(WhatsAppInstance, db_instance_id)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    
+    # Validate new credentials by checking state
+    try:
+        service = get_whatsapp_service()
+        state_response = await service.get_state_instance(
+            request.instance_id,
+            request.token
+        )
+        state = state_response.get("stateInstance", "unknown")
+        
+        # Update instance
+        old_instance_id = instance.instance_id
+        instance.instance_id = request.instance_id
+        instance.token = request.token
+        
+        # If assigned to a tenant, update their settings too
+        if instance.assigned_to_tenant_id:
+            tenant = await db.get(Tenant, instance.assigned_to_tenant_id)
+            if tenant:
+                tenant.greenapi_instance_id = request.instance_id
+                tenant.greenapi_token = request.token
+        
+        await db.commit()
+        
+        return {
+            "status": "updated",
+            "old_instance_id": old_instance_id,
+            "new_instance_id": request.instance_id,
+            "state": state,
+            "connected": state == "authorized"
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid credentials or connection error: {str(e)}"
+        )
+
+
+def _get_state_message_admin(state: str) -> str:
+    """Get human-readable message for WhatsApp state (admin version)."""
+    messages = {
+        "notAuthorized": "Not authorized - needs QR scan",
+        "authorized": "Connected and ready",
+        "blocked": "Instance blocked",
+        "sleepMode": "Sleep mode",
+        "starting": "Starting up...",
+        "unknown": "Unknown state"
+    }
+    return messages.get(state, state)
+
+
 # ============== Tracing / Debug ==============
 # Note: Traces are also admin-only for now
 

@@ -138,6 +138,130 @@ async def disconnect_whatsapp(
     return {"status": "disconnected"}
 
 
+@router.get("/whatsapp/status")
+async def get_whatsapp_status(
+    tenant: CurrentTenant
+):
+    """
+    Get WhatsApp instance status.
+    
+    Returns the current state of the WhatsApp instance:
+    - "notAuthorized" - Need to scan QR code
+    - "authorized" - Connected and ready
+    - "blocked" - Instance is blocked
+    - "sleepMode" - Instance in sleep mode
+    """
+    if not tenant.greenapi_instance_id or not tenant.greenapi_token:
+        return {
+            "connected": False,
+            "state": "notConfigured",
+            "message": "WhatsApp not configured. Please add instance ID and token."
+        }
+    
+    try:
+        service = get_whatsapp_service()
+        state_response = await service.get_state_instance(
+            tenant.greenapi_instance_id,
+            tenant.greenapi_token
+        )
+        
+        state = state_response.get("stateInstance", "unknown")
+        
+        return {
+            "connected": state == "authorized",
+            "state": state,
+            "phone": tenant.whatsapp_phone,
+            "instance_id": tenant.greenapi_instance_id,
+            "message": _get_state_message(state)
+        }
+    except Exception as e:
+        return {
+            "connected": False,
+            "state": "error",
+            "message": f"Failed to check status: {str(e)}"
+        }
+
+
+@router.get("/whatsapp/qr")
+async def get_whatsapp_qr(
+    tenant: CurrentTenant
+):
+    """
+    Get QR code for WhatsApp authorization.
+    
+    Returns base64 encoded QR code image if instance is not authorized.
+    If already authorized, returns empty qr field.
+    """
+    if not tenant.greenapi_instance_id or not tenant.greenapi_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="WhatsApp not configured. Please add instance ID and token first."
+        )
+    
+    try:
+        service = get_whatsapp_service()
+        
+        # First check state
+        state_response = await service.get_state_instance(
+            tenant.greenapi_instance_id,
+            tenant.greenapi_token
+        )
+        state = state_response.get("stateInstance", "unknown")
+        
+        if state == "authorized":
+            return {
+                "state": "authorized",
+                "qr": None,
+                "message": "WhatsApp already connected! QR code not needed."
+            }
+        
+        # Get QR code
+        qr_response = await service.get_qr(
+            tenant.greenapi_instance_id,
+            tenant.greenapi_token
+        )
+        
+        # GreenAPI returns: {"type": "qrCode", "message": "base64_image_data"}
+        # or {"type": "error", "message": "error text"}
+        if qr_response.get("type") == "qrCode":
+            return {
+                "state": state,
+                "qr": qr_response.get("message"),  # Base64 QR image
+                "message": "Scan this QR code with WhatsApp on your phone"
+            }
+        elif qr_response.get("type") == "alreadyLogged":
+            return {
+                "state": "authorized",
+                "qr": None,
+                "message": "WhatsApp already connected!"
+            }
+        else:
+            return {
+                "state": state,
+                "qr": None,
+                "message": qr_response.get("message", "Failed to get QR code")
+            }
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get QR code: {str(e)}"
+        )
+
+
+def _get_state_message(state: str) -> str:
+    """Get human-readable message for WhatsApp state."""
+    messages = {
+        "notAuthorized": "Not authorized. Scan QR code to connect.",
+        "authorized": "Connected and ready!",
+        "blocked": "Instance is blocked. Contact support.",
+        "sleepMode": "Instance in sleep mode. Will wake up on first message.",
+        "starting": "Instance is starting up...",
+        "unknown": "Unknown state. Try refreshing."
+    }
+    return messages.get(state, f"State: {state}")
+
+
 @router.patch("/language")
 async def update_language(
     request: LanguageSettings,
