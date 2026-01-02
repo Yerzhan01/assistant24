@@ -43,7 +43,7 @@ jobs:
         ssh $USER@$HOST "mkdir -p $PROJECT_PATH"
 
         # Transfer files (excluding unwanted) via rsync
-        rsync -avz --exclude '.git' --exclude 'venv' --exclude 'node_modules' --exclude '__pycache__' ./ $USER@$HOST:$PROJECT_PATH/
+        rsync -avz -e "ssh -o StrictHostKeyChecking=no" --exclude '.git' --exclude 'venv' --exclude 'node_modules' --exclude '__pycache__' ./ $USER@$HOST:$PROJECT_PATH/
 
         # Configure Ports
         BACKEND_PORT=8000
@@ -55,7 +55,8 @@ jobs:
         fi
 
         # Run Deployment
-        ssh $USER@$HOST "cd $PROJECT_PATH && \
+        # Using StrictHostKeyChecking=no to avoid known_hosts issues in CI
+        ssh -o StrictHostKeyChecking=no $USER@$HOST "cd $PROJECT_PATH && \
           export DOMAIN=${{ env.DOMAIN }} && \
           export BACKEND_PORT=$BACKEND_PORT && \
           export FRONTEND_PORT=$FRONTEND_PORT && \
