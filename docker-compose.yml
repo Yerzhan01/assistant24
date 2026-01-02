@@ -45,6 +45,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/assistant24
       - REDIS_URL=redis://redis:6379/0
+      - BASE_URL=https://${DOMAIN:-localhost}
     env_file:
       - .env
     depends_on:
@@ -89,6 +90,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/assistant24
       - REDIS_URL=redis://redis:6379/0
+      - BASE_URL=https://${DOMAIN:-localhost}
     env_file:
       - .env
     depends_on:
@@ -110,6 +112,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/assistant24
       - REDIS_URL=redis://redis:6379/0
+      - BASE_URL=https://${DOMAIN:-localhost}
     env_file:
       - .env
     depends_on:

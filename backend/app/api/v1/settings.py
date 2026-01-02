@@ -53,8 +53,7 @@ async def setup_telegram(
     # Update tenant with bot token
     tenant.telegram_bot_token = request.bot_token
     
-    # TODO: Get base URL from settings or request
-    base_url = "https://your-domain.com"  # Replace with actual domain
+    base_url = app_settings.base_url
     
     # Set up webhook
     try:
@@ -101,8 +100,7 @@ async def setup_whatsapp(
     tenant.greenapi_token = request.token
     tenant.whatsapp_phone = request.phone
     
-    # TODO: Get base URL from settings
-    base_url = "https://your-domain.com"
+    base_url = app_settings.base_url
     webhook_url = f"{base_url}/api/v1/webhooks/whatsapp/{tenant.id}"
     
     # Set up webhook
