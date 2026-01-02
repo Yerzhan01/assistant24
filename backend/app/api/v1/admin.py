@@ -257,7 +257,7 @@ async def get_admin_users(
         
         user_list.append({
             "id": user.id,
-            "email": user.email,
+            "email": tenant.email if tenant else "N/A",
             "business_name": tenant.business_name if tenant else "N/A",
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "is_active": user.is_active,

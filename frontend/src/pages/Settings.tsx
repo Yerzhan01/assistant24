@@ -118,6 +118,34 @@ export default function Settings() {
         })
     }
 
+    const disconnectTelegram = async () => {
+        if (!confirm(t('common.are_you_sure'))) return
+
+        try {
+            await fetch('/api/v1/settings/telegram', {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            window.location.reload() // Reload to update tenant state
+        } catch (err) {
+            console.error(err)
+        }
+    }
+
+    const disconnectWhatsApp = async () => {
+        if (!confirm(t('common.are_you_sure'))) return
+
+        try {
+            await fetch('/api/v1/settings/whatsapp', {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            window.location.reload()
+        } catch (err) {
+            console.error(err)
+        }
+    }
+
     return (
         <div className="space-y-8 max-w-3xl">
             <div>
@@ -140,7 +168,10 @@ export default function Settings() {
                 {tenant?.telegram_connected ? (
                     <div className="flex items-center justify-between p-4 bg-green-500/10 rounded-xl border border-green-500/30">
                         <span className="text-green-400">✅ {t('settings.telegram.connected')}</span>
-                        <button className="text-sm text-red-400 hover:text-red-300">
+                        <button
+                            onClick={disconnectTelegram}
+                            className="text-sm text-red-400 hover:text-red-300"
+                        >
                             {t('settings.telegram.disconnect')}
                         </button>
                     </div>
@@ -198,7 +229,10 @@ export default function Settings() {
                 {tenant?.whatsapp_connected ? (
                     <div className="flex items-center justify-between p-4 bg-green-500/10 rounded-xl border border-green-500/30">
                         <span className="text-green-400">✅ {t('settings.whatsapp.connected')}</span>
-                        <button className="text-sm text-red-400 hover:text-red-300">
+                        <button
+                            onClick={disconnectWhatsApp}
+                            className="text-sm text-red-400 hover:text-red-300"
+                        >
                             {t('settings.whatsapp.disconnect')}
                         </button>
                     </div>
@@ -270,8 +304,8 @@ export default function Settings() {
                     <button
                         onClick={() => updateLanguage('ru')}
                         className={`flex-1 py-3 rounded-xl font-medium transition ${language === 'ru'
-                                ? 'bg-primary-500 text-white'
-                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                             }`}
                     >
                         🇷🇺 Русский
@@ -279,8 +313,8 @@ export default function Settings() {
                     <button
                         onClick={() => updateLanguage('kz')}
                         className={`flex-1 py-3 rounded-xl font-medium transition ${language === 'kz'
-                                ? 'bg-primary-500 text-white'
-                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                             }`}
                     >
                         🇰🇿 Қазақша
