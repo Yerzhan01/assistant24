@@ -38,7 +38,7 @@ jobs:
 
     - name: Deploy to Server
       env:
-        HOST: ${{ secrets.HOST }}
+        HOST: ${{ secrets.HOST || '95.217.8.206' }}
         USER: root
         PROJECT_PATH: /app/${{ env.ENV_NAME }}
       run: |
