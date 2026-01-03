@@ -27,6 +27,12 @@ redis_data/
 
 # Logs
 *.log
+*_logs.txt
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.db
+celerybeat.pid
 
 # Deployment artifacts
 install.sh
