@@ -5,16 +5,11 @@ import {
     Plus,
     Search,
     MessageCircle,
-    Settings,
     X,
     Loader2,
-    UserPlus,
-    UserMinus,
     Bell,
     BellOff,
-    Link,
-    ExternalLink,
-    MoreVertical
+    Link
 } from 'lucide-react'
 
 interface WhatsAppGroup {
@@ -174,7 +169,7 @@ export default function Groups() {
         }
     }
 
-    const sendMessage = async (groupId: string) => {
+    const sendMessage = async (_groupId: string) => {
         // Open chat with group
         window.open(`https://wa.me/?text=`, '_blank')
     }

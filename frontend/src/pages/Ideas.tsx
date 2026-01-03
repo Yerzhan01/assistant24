@@ -6,7 +6,6 @@ import {
     Plus,
     X,
     Star,
-    Tag,
     Loader2,
     Trash2,
     Edit,
@@ -33,7 +32,7 @@ const categories = [
 ]
 
 export default function Ideas() {
-    const { token } = useAuth()
+    useAuth()
     const [ideas, setIdeas] = useState<Idea[]>([])
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)

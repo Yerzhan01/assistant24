@@ -4,17 +4,13 @@ import {
     Wallet,
     Plus,
     X,
-    Calendar,
-    DollarSign,
-    User,
     Loader2,
     Trash2,
     Edit,
     CheckCircle,
     AlertTriangle,
     Search,
-    ArrowUpRight,
-    ArrowDownLeft
+    ArrowUpRight
 } from 'lucide-react'
 
 interface Invoice {

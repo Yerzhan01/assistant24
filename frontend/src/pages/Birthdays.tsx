@@ -6,7 +6,6 @@ import {
     Plus,
     X,
     Calendar,
-    Gift,
     Loader2,
     Trash2,
     Edit,
@@ -26,7 +25,7 @@ interface Birthday {
 }
 
 export default function Birthdays() {
-    const { token } = useAuth()
+    useAuth()
     const [birthdays, setBirthdays] = useState<Birthday[]>([])
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)

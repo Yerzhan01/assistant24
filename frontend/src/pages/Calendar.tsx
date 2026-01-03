@@ -34,13 +34,13 @@ interface CalendarDay {
 type ViewMode = 'month' | 'week' | 'day'
 
 export default function Calendar() {
-    const { t, token } = useAuth()
+    useAuth()
     const [currentDate, setCurrentDate] = useState(new Date())
     const [viewMode, setViewMode] = useState<ViewMode>('month')
     const [events, setEvents] = useState<Meeting[]>([])
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
-    const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+    const [, setSelectedDate] = useState<Date | null>(null)
     const [selectedEvent, setSelectedEvent] = useState<Meeting | null>(null)
 
     // Form state
@@ -74,7 +74,7 @@ export default function Calendar() {
         } finally {
             setLoading(false)
         }
-    }, [currentDate, token])
+    }, [currentDate])
 
     useEffect(() => {
         fetchEvents()

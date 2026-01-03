@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import {
     TrendingUp,
-    TrendingDown,
-    Calendar,
     Download,
     PieChart,
     BarChart3,
@@ -129,8 +127,8 @@ export default function Reports() {
                                 key={p}
                                 onClick={() => setPeriod(p)}
                                 className={`px-4 py-2 rounded-lg text-sm font-medium transition ${period === p
-                                        ? 'bg-primary-500 text-white'
-                                        : 'text-gray-400 hover:text-white'
+                                    ? 'bg-primary-500 text-white'
+                                    : 'text-gray-400 hover:text-white'
                                     }`}
                             >
                                 {p === 'month' ? 'Месяц' : p === 'quarter' ? 'Квартал' : 'Год'}

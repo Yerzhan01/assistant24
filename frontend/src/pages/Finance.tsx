@@ -5,7 +5,6 @@ import {
     TrendingUp,
     TrendingDown,
     Plus,
-    Filter,
     Download,
     Calendar,
     Search,
