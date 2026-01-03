@@ -12,6 +12,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "${DB_PORT:-5432}:5432"
+    networks:
+      - assistant-net
+      - default
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
@@ -27,6 +30,9 @@ services:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - assistant-net
+      - default
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
@@ -102,6 +108,9 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app:delegated
+    networks:
+      - assistant-net
+      - default
     command: celery -A app.workers.celery_app worker --loglevel=info
 
   # Celery Beat (periodic tasks scheduler)
@@ -125,11 +134,10 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app:delegated
-    command: celery -A app.workers.celery_app beat --loglevel=info
-
     networks:
       - assistant-net
       - default
+    command: celery -A app.workers.celery_app beat --loglevel=info
 
 networks:
   assistant-net:
