@@ -1,4 +1,4 @@
-# Production Environment
+# Development Environment
 # Uses shared infrastructure from docker-compose.infra.yml
 
 services:
@@ -6,14 +6,14 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: assistant24-backend-prod
+    container_name: assistant24-backend-dev
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@assistant24-db:5432/assistant24_prod
-      - REDIS_URL=redis://assistant24-redis:6379/0
-      - BASE_URL=https://link-it.tech
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@assistant24-db:5432/assistant24_dev
+      - REDIS_URL=redis://assistant24-redis:6379/1
+      - BASE_URL=https://dev.link-it.tech
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     env_file:
       - .env
@@ -27,10 +27,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: assistant24-frontend-prod
+    container_name: assistant24-frontend-dev
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - CHOKIDAR_USEPOLLING=true
     networks:
@@ -45,12 +45,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: assistant24-celery-worker-prod
+    container_name: assistant24-celery-worker-dev
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@assistant24-db:5432/assistant24_prod
-      - REDIS_URL=redis://assistant24-redis:6379/0
-      - BASE_URL=https://link-it.tech
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@assistant24-db:5432/assistant24_dev
+      - REDIS_URL=redis://assistant24-redis:6379/1
+      - BASE_URL=https://dev.link-it.tech
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     env_file:
       - .env
@@ -64,12 +64,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: assistant24-celery-beat-prod
+    container_name: assistant24-celery-beat-dev
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@assistant24-db:5432/assistant24_prod
-      - REDIS_URL=redis://assistant24-redis:6379/0
-      - BASE_URL=https://link-it.tech
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@assistant24-db:5432/assistant24_dev
+      - REDIS_URL=redis://assistant24-redis:6379/1
+      - BASE_URL=https://dev.link-it.tech
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     env_file:
       - .env

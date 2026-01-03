@@ -20,10 +20,12 @@ jobs:
         if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
           echo "ENV_NAME=dev" >> $GITHUB_ENV
           echo "DOMAIN=dev.link-it.tech" >> $GITHUB_ENV
+          echo "COMPOSE_FILE=docker-compose.dev.yml" >> $GITHUB_ENV
           echo "Deploying to DEVELOPMENT environment"
         elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
           echo "ENV_NAME=prod" >> $GITHUB_ENV
           echo "DOMAIN=link-it.tech" >> $GITHUB_ENV
+          echo "COMPOSE_FILE=docker-compose.prod.yml" >> $GITHUB_ENV
           echo "Deploying to PRODUCTION environment"
         fi
 
@@ -32,50 +34,43 @@ jobs:
         mkdir -p ~/.ssh/
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
-        # Disable Strict Host Checking globally for this runner
         echo "StrictHostKeyChecking no" >> ~/.ssh/config
-
 
     - name: Deploy to Server
       env:
         HOST: ${{ secrets.HOST || '95.217.8.206' }}
         USER: root
         PROJECT_PATH: /app/${{ env.ENV_NAME }}
+        INFRA_PATH: /app/infra
       run: |
-        # Create separate directories for dev and prod
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 $USER@$HOST "mkdir -p $PROJECT_PATH"
+        # Create directories
+        ssh -i ~/.ssh/id_ed25519 $USER@$HOST "mkdir -p $PROJECT_PATH $INFRA_PATH"
 
-        # Transfer files (excluding unwanted) via rsync
-        rsync -avz -e "ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519" --exclude '.git' --exclude 'venv' --exclude 'node_modules' --exclude '__pycache__' ./ $USER@$HOST:$PROJECT_PATH/
+        # Transfer project files
+        rsync -avz -e "ssh -i ~/.ssh/id_ed25519" \
+          --exclude '.git' --exclude 'venv' --exclude 'node_modules' --exclude '__pycache__' \
+          ./ $USER@$HOST:$PROJECT_PATH/
 
-        # Configure Ports
-        BACKEND_PORT=8000
-        FRONTEND_PORT=3000
-        DB_PORT=5432
-        REDIS_PORT=6379
-        
-        if [[ "${{ env.ENV_NAME }}" == "dev" ]]; then
-          BACKEND_PORT=8001
-          FRONTEND_PORT=3001
-          DB_PORT=5433
-          REDIS_PORT=6380
-        fi
+        # Copy infra files to infra directory
+        rsync -avz -e "ssh -i ~/.ssh/id_ed25519" \
+          docker-compose.infra.yml init-db.sql \
+          $USER@$HOST:$INFRA_PATH/
 
-        # Run Deployment
-        # Using StrictHostKeyChecking=no to avoid known_hosts issues in CI
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 $USER@$HOST "cd $PROJECT_PATH && \
-          export DOMAIN=${{ env.DOMAIN }} && \
-          export ENV_NAME=${{ env.ENV_NAME }} && \
-          export BACKEND_PORT=$BACKEND_PORT && \
-          export FRONTEND_PORT=$FRONTEND_PORT && \
-          export DB_PORT=$DB_PORT && \
-          export DB_PORT=$DB_PORT && \
-          export REDIS_PORT=$REDIS_PORT && \
-          export GEMINI_API_KEY="AIzaSyC5GHxQHeJaFZsiNJmOjBos3-QJlu9fDKc" && \
-          # Ensure .env exists or Copy default
-          if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || touch .env; fi && \
-          # Create docker network if it doesn't exist
+        # Deploy infrastructure (only if not running)
+        ssh -i ~/.ssh/id_ed25519 $USER@$HOST "cd $INFRA_PATH && \
           docker network create assistant-net 2>/dev/null || true && \
-          # Restart containers
-          docker compose down && \
-          docker compose up -d --build"
+          docker compose -f docker-compose.infra.yml up -d"
+
+        # Deploy environment
+        ssh -i ~/.ssh/id_ed25519 $USER@$HOST "cd $PROJECT_PATH && \
+          export GEMINI_API_KEY='${{ secrets.GEMINI_API_KEY }}' && \
+          if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || touch .env; fi && \
+          docker compose -f ${{ env.COMPOSE_FILE }} down --remove-orphans && \
+          docker compose -f ${{ env.COMPOSE_FILE }} build --no-cache && \
+          docker compose -f ${{ env.COMPOSE_FILE }} up -d"
+
+    - name: Post Checkout code
+      run: echo "Deployment to ${{ env.ENV_NAME }} completed"
+
+    - name: Complete job
+      run: echo "✅ Deploy to ${{ env.DOMAIN }} finished"
