@@ -54,5 +54,24 @@ jobs:
           docker compose down --remove-orphans && \
           docker compose up -d --build"
 
+    - name: Check Container Status
+      env:
+        HOST: ${{ secrets.HOST || '95.217.8.206' }}
+        USER: root
+        PROJECT_PATH: /app/assistant24
+      run: |
+        ssh -i ~/.ssh/id_ed25519 $USER@$HOST "cd $PROJECT_PATH && \
+          echo '=== Container Status ===' && \
+          docker compose ps -a && \
+          echo '' && \
+          echo '=== Backend Logs (last 50 lines) ===' && \
+          docker compose logs backend --tail=50 2>&1 || true && \
+          echo '' && \
+          echo '=== Frontend Logs (last 50 lines) ===' && \
+          docker compose logs frontend --tail=50 2>&1 || true && \
+          echo '' && \
+          echo '=== DB Logs (last 20 lines) ===' && \
+          docker compose logs db --tail=20 2>&1 || true"
+
     - name: Complete job
       run: echo "✅ Deploy to ${{ env.DOMAIN }} finished"
