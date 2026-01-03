@@ -65,7 +65,13 @@ services:
     networks:
       - assistant-net
       - default
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
 
   # Frontend (React)
   frontend:
