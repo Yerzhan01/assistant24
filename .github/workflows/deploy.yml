@@ -48,7 +48,7 @@ jobs:
         ssh -i ~/.ssh/id_ed25519 $USER@$HOST "cd $PROJECT_PATH && \
           export DOMAIN=${{ env.DOMAIN }} && \
           export ENV_NAME=${{ env.ENV_NAME }} && \
-          export GEMINI_API_KEY='AIzaSyC5GHxQHeJaFZsiNJmOjBos3-QJlu9fDKc' && \
+          export GEMINI_API_KEY='${{ secrets.GEMINI_API_KEY }}' && \
           if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || touch .env; fi && \
           docker network create assistant-net 2>/dev/null || true && \
           docker compose down --remove-orphans && \
