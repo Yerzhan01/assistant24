@@ -195,35 +195,62 @@ class WhatsAppModule(BaseModule):
             return ModuleResponse(success=False, message=f"❌ Ошибка: {str(e)}")
     
     async def _get_stats(self, tenant_id: UUID, language: str) -> ModuleResponse:
-        """Get WhatsApp stats."""
-        from app.models.tenant import Tenant
-        tenant = await self.db.get(Tenant, tenant_id)
-        
-        if not tenant or not tenant.greenapi_instance_id or not tenant.greenapi_token:
-            return ModuleResponse(success=False, message="❌ WhatsApp не подключен")
+        """Get WhatsApp stats for today (DB based)."""
+        from app.models.chat_message import ChatMessage
+        from sqlalchemy import func
+        from datetime import datetime
         
         try:
-            from app.services.whatsapp_bot import get_whatsapp_service
-            whatsapp = get_whatsapp_service()
+            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             
-            chats = await whatsapp.get_chats(
-                tenant.greenapi_instance_id,
-                tenant.greenapi_token
+            # Count total messages today
+            stmt = select(func.count()).select_from(ChatMessage).where(
+                ChatMessage.tenant_id == tenant_id,
+                ChatMessage.created_at >= today
             )
+            total_result = await self.db.execute(stmt)
+            total_today = total_result.scalar_one() or 0
             
-            if not chats:
-                return ModuleResponse(success=True, message="📊 Нет данных о чатах")
+            # Get unique senders today (by chat_id)
+            stmt = select(
+                ChatMessage.chat_id, 
+                func.count(ChatMessage.id)
+            ).where(
+                ChatMessage.tenant_id == tenant_id,
+                ChatMessage.created_at >= today,
+                ChatMessage.role == "user" # Only incoming
+            ).group_by(ChatMessage.chat_id).limit(10)
             
-            groups = [c for c in chats if c.get("id", "").endswith("@g.us")]
-            contacts = [c for c in chats if c.get("id", "").endswith("@c.us")]
+            result = await self.db.execute(stmt)
+            active_chats = result.all()
             
-            msg = f"""📊 **Статистика WhatsApp:**
+            lines = [
+                f"📊 Статистика за сегодня ({today.strftime('%d.%m.%Y')}):",
+                f"📨 Всего входящих: {total_today}",
+                f"🗣 Активных диалогов: {len(active_chats)}",
+            ]
+            
+            if active_chats:
+                lines.append("\n📝 Кто писал:")
+                for chat_id, msg_count in active_chats:
+                    clean_phone = chat_id.replace("@c.us", "").replace("@g.us", "")
+                    # Try contact lookup
+                    contact_stmt = select(Contact).where(
+                        Contact.tenant_id == tenant_id,
+                        Contact.phone.ilike(f"%{clean_phone}%")
+                    ).limit(1)
+                    contact_res = await self.db.execute(contact_stmt)
+                    contact = contact_res.scalar_one_or_none()
+                    
+                    name = contact.name if contact else f"{clean_phone}"
+                    if chat_id.endswith("@g.us"):
+                        name = (f"Группа {contact.name}" if contact else f"Группа {clean_phone}")
 
-💬 Всего чатов: {len(chats)}
-👥 Групп: {len(groups)}
-👤 Контактов: {len(contacts)}"""
-            
-            return ModuleResponse(success=True, message=msg)
+                    lines.append(f"  • {name}: {msg_count} сообщ.")
+            else:
+                lines.append("\n📭 Сообщений сегодня не было (начиная с момента обновления).")
+                
+            return ModuleResponse(success=True, message="\n".join(lines))
             
         except Exception as e:
             return ModuleResponse(success=False, message=f"❌ Ошибка: {str(e)}")
