@@ -298,6 +298,34 @@ class AIRouter:
                 text = text.strip()
             
             result = json.loads(text)
+
+            # HARD OVERRIDE: Check if user wants to send WhatsApp message but AI failed
+            try:
+                msg_lower = message.lower().strip()
+                wa_keywords = ["напиши", "отправь", "скажи", "жаз", "жібер", "write", "send"]
+                
+                # If message starts with "send X" and intent is NOT whatsapp
+                is_messaging_request = any(msg_lower.startswith(kw) for kw in wa_keywords)
+                
+                current_intents = result.get("intents", [])
+                first_intent = current_intents[0].get("intent") if current_intents else "unknown"
+                
+                # Check if whatsapp module is enabled
+                whatsapp_enabled = any(m.module_id == "whatsapp" for m in modules)
+
+                if is_messaging_request and first_intent != "whatsapp" and whatsapp_enabled:
+                    logger.warning(f"Overriding intent '{first_intent}' -> 'whatsapp' based on keywords")
+                    result["intents"] = [{
+                        "intent": "whatsapp",
+                        "confidence": 1.0,
+                        "data": {
+                            "action": "send_message",
+                            "content": message,
+                            "original_message": message
+                        }
+                    }]
+            except Exception as e:
+                logger.error(f"Error in intent override logic: {e}")
             
             # Attach metadata
             if hasattr(response, "usage_metadata"):
@@ -331,6 +359,17 @@ class AIRouter:
                 "reasoning": "Обнаружен запрос на удаление встречи (ключевые слова)",
                 "intents": [{"intent": "cancel_meeting", "confidence": 0.9, "data": {}}]
             }
+
+        # Priority: WhatsApp Messaging
+        wa_keywords = ["напиши", "отправь", "скажи", "жаз", "жібер", "write", "send"]
+        if any(message_lower.startswith(kw) or f" {kw} " in f" {message_lower} " for kw in wa_keywords):
+            # Check if whatsapp module is enabled
+            if any(m.module_id == "whatsapp" for m in modules):
+                # Extract potential name simply (naive)
+                return {
+                    "reasoning": "Обнаружен прямой запрос на отправку сообщения (Priority)",
+                    "intents": [{"intent": "whatsapp", "confidence": 0.95, "data": {"action": "send_message", "original_message": message}}]
+                }
 
         if any(kw in message_lower for kw in schedule_keywords):
             return {
