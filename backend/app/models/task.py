@@ -134,6 +134,20 @@ class Task(Base):
     reminder_sent: Mapped[bool] = mapped_column(Boolean, default=False)
     
     # Relationships
+    # Subtasks hierarchy
+    parent_id: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True
+    )
+    
+    # 2.0 fields
+    recurrence_rule: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    tags: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    is_supervisor_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+    
+    # Relationships
     tenant: Mapped["Tenant"] = relationship(back_populates="tasks")
     group: Mapped[Optional["GroupChat"]] = relationship(back_populates="tasks")
     creator: Mapped[Optional["User"]] = relationship(
@@ -144,10 +158,18 @@ class Task(Base):
         foreign_keys=[assignee_id],
         back_populates="assigned_tasks"
     )
+    
+    # Self-referential relationship for subtasks
     subtasks: Mapped[list["Task"]] = relationship(
         "Task",
-        backref="parent", # This creates a 'parent' attribute on the child task
-        remote_side=[id] # This tells SQLAlchemy that 'id' on THIS model is the remote side for the 'parent_id' on the related model
+        back_populates="parent",
+        cascade="all, delete-orphan"
+    )
+    
+    parent: Mapped[Optional["Task"]] = relationship(
+        "Task",
+        back_populates="subtasks",
+        remote_side=[id]
     )
     # reminders: Mapped[list["TaskReminder"]] = relationship("TaskReminder", back_populates="task")
     
