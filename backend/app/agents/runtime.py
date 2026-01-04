@@ -14,6 +14,7 @@ from app.agents.ideas import IdeasAgent
 from app.agents.debtor import DebtorAgent
 from app.agents.knowledge import KnowledgeAgent
 from app.agents.travel import TravelAgent
+from app.agents.whatsapp import WhatsAppAgent
 import logging
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ class AgentRuntime:
             "debtor_agent": DebtorAgent(db, tenant_id, user_id, language),
             "knowledge_agent": KnowledgeAgent(db, tenant_id, user_id, language),
             "travel_agent": TravelAgent(db, tenant_id, user_id, language),
+            "whatsapp_agent": WhatsAppAgent(db, tenant_id, user_id, language),
         }
         
         # Handoff map
@@ -64,6 +66,7 @@ class AgentRuntime:
             "transfer_to_debtor": "debtor_agent",
             "transfer_to_knowledge": "knowledge_agent",
             "transfer_to_travel": "travel_agent",
+            "transfer_to_whatsapp": "whatsapp_agent",
         }
     
     async def execute_agent_tool(

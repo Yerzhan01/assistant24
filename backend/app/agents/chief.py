@@ -60,6 +60,14 @@ class ChiefOfStaffAgent(BaseAgent):
         Thought: Нужно придумать текст/идею.
         Action: transfer_to_ideas
         
+        User: "Напиши Ержану привет"
+        Thought: Пользователь хочет отправить WhatsApp сообщение. Есть имя (Ержан), сообщение (привет).
+        Action: transfer_to_whatsapp
+        
+        User: "Отправь Асхату сообщение как дела"
+        Thought: Запрос на отправку сообщения в WhatsApp.
+        Action: transfer_to_whatsapp
+        
         ЕСЛИ ПОЛЬЗОВАТЕЛЬ ГОВОРИТ О ПОЕЗДКЕ/ПУТЕШЕСТВИИ:
         Например: "Хочу поехать в Ташкент", "Лечу в Дубай"
         → Ответь ТЕКСТОМ с предложениями...
@@ -89,6 +97,12 @@ class ChiefOfStaffAgent(BaseAgent):
         - debtor_agent: долги, счета
         - knowledge_agent: поиск в интернете
         - travel_agent: путешествия, отели, билеты
+        - whatsapp_agent: WhatsApp сообщения (напиши, отправь кому-то)
+        
+        ВАЖНО! Если пользователь говорит:
+        - "напиши [имя] [сообщение]" → transfer_to_whatsapp
+        - "отправь [имя] [сообщение]" → transfer_to_whatsapp
+        - "скажи [имя] [сообщение]" → transfer_to_whatsapp
         
         Язык: {self.language}
         """
@@ -166,6 +180,12 @@ class ChiefOfStaffAgent(BaseAgent):
                 description="Путешествия, отели, рейсы, курс валют.",
                 parameters={},
                 function=lambda: "handoff:travel_agent"
+            ),
+            AgentTool(
+                name="transfer_to_whatsapp",
+                description="Отправить сообщение кому-то через WhatsApp. ИСПОЛЬЗУЙ когда пользователь говорит 'напиши', 'отправь', 'скажи' + имя.",
+                parameters={},
+                function=lambda: "handoff:whatsapp_agent"
             ),
             # Universal multi-step orchestration
             AgentTool(
