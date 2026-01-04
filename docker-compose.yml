@@ -51,7 +51,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/assistant24
       - REDIS_URL=redis://redis:6379/0
-      - BASE_URL=https://${DOMAIN:-localhost}
+      - BASE_URL=https://${DOMAIN:-link-it.tech}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     env_file:
       - .env
@@ -116,7 +116,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/assistant24
       - REDIS_URL=redis://redis:6379/0
-      - BASE_URL=https://${DOMAIN:-localhost}
+      - BASE_URL=https://${DOMAIN:-link-it.tech}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     env_file:
       - .env
@@ -142,7 +142,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/assistant24
       - REDIS_URL=redis://redis:6379/0
-      - BASE_URL=https://${DOMAIN:-localhost}
+      - BASE_URL=https://${DOMAIN:-link-it.tech}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     env_file:
       - .env
