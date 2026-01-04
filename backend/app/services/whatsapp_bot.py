@@ -1207,6 +1207,20 @@ class WhatsAppBotService:
                         phone=sender_data.get("chatId", "").split("@")[0],
                         message=response.message
                     )
+                    
+                    # === MEMORY FIX: Save AI Response ===
+                    try:
+                        from app.models.chat_message import ChatMessage
+                        ai_msg = ChatMessage(
+                            tenant_id=tenant.id,
+                            chat_id=str(chat_id),
+                            role="assistant",
+                            content=response.message
+                        )
+                        db.add(ai_msg)
+                        await db.commit()
+                    except Exception as e:
+                        logger.error(f"Failed to save outgoing message history: {e}")
 
             return {"status": "ok", "processed": True}
     
