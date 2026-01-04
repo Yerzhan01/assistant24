@@ -154,6 +154,11 @@ class ContactsAgent(BaseAgent):
         return f"❌ Контакт '{query}' не найден"
     
     async def _create_contact(self, name: str = "", phone: str = "", email: str = "", comment: str = "", **kwargs) -> str:
+        # Debug logging
+        import logging
+        logger = logging.getLogger("contacts_agent")
+        logger.info(f"Creating contact: name='{name}', phone='{phone}', tenant_id='{self.tenant_id}'")
+
         if not name:
             return "❌ Укажите имя контакта (параметр name)."
         
