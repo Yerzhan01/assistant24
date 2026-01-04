@@ -236,7 +236,11 @@ class AIRouter:
         """
         if not self.model:
             # Fallback: keyword-based classification
+            logger.warning("Gemini model not initialized, using fallback classification")
             return self._fallback_classify(message, modules)
+        
+        module_ids = [m.module_id for m in modules]
+        logger.info(f"Classifying intent with modules: {module_ids} for message: {message[:50]}...")
         
         system_prompt = self._build_system_prompt(modules, context, message_history)
         
@@ -287,17 +291,10 @@ class AIRouter:
             
             # Parse JSON from response
             text = response.text.strip()
+            logger.info(f"Gemini Raw Response: {text}")
             
             # Clean up markdown code blocks if present
             if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-                text = text.strip()
-            
-            text = response.text.strip()
-            
-            # Clean up markdown code blocks if present
             if text.startswith("```"):
                 text = text.split("```")[1]
                 if text.startswith("json"):
