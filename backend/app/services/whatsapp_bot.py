@@ -371,6 +371,27 @@ class WhatsAppBotService:
     
     # ==================== Groups Methods ====================
     
+    async def get_chats(
+        self,
+        instance_id: str,
+        token: str
+    ) -> List[Dict[str, Any]]:
+        """Get all chats (contacts and groups).
+        
+        Returns list of chats with format:
+        - id: chat ID (phone@c.us or groupId@g.us)
+        - name: chat name
+        - type: 'contact' or 'group'
+        """
+        url = self._build_url(instance_id, token, "getChats")
+        
+        async with self._get_client() as client:
+            response = await client.get(url)
+            data = response.json()
+            
+            # Filter only groups
+            return data if isinstance(data, list) else []
+    
     async def create_group(
         self,
         instance_id: str,

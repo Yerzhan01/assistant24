@@ -135,6 +135,72 @@ async def list_groups(
     return result.scalars().all()
 
 
+@router.post("/groups/sync", response_model=List[GroupChatResponse])
+@router.post("/whatsapp/groups/sync", response_model=List[GroupChatResponse])
+async def sync_whatsapp_groups(
+    tenant=Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Sync all WhatsApp groups from connected account.
+    Automatically imports all groups and lets user toggle which to monitor.
+    """
+    if not tenant.greenapi_instance_id or not tenant.greenapi_token:
+        raise HTTPException(status_code=400, detail="WhatsApp not connected")
+    
+    from app.services.whatsapp_bot import get_whatsapp_service
+    
+    whatsapp = get_whatsapp_service()
+    
+    try:
+        # Get all chats from WhatsApp
+        chats = await whatsapp.get_chats(
+            tenant.greenapi_instance_id,
+            tenant.greenapi_token
+        )
+        
+        # Filter only groups (end with @g.us)
+        groups = [c for c in chats if c.get("id", "").endswith("@g.us")]
+        
+        imported = []
+        for group_data in groups:
+            chat_id = group_data.get("id", "")
+            name = group_data.get("name", "") or f"Group {chat_id[:8]}"
+            
+            # Check if already exists
+            stmt = select(GroupChat).where(
+                and_(
+                    GroupChat.tenant_id == tenant.id,
+                    GroupChat.whatsapp_chat_id == chat_id
+                )
+            )
+            existing = await db.execute(stmt)
+            if existing.scalar_one_or_none():
+                continue  # Already imported
+            
+            # Create new group (disabled by default)
+            group = GroupChat(
+                tenant_id=tenant.id,
+                whatsapp_chat_id=chat_id,
+                name=name,
+                is_active=False,  # User will enable manually
+                task_extraction_enabled=False,
+                silent_mode=True
+            )
+            db.add(group)
+            imported.append(group)
+        
+        await db.commit()
+        
+        # Return all groups (existing + new)
+        stmt = select(GroupChat).where(GroupChat.tenant_id == tenant.id).order_by(GroupChat.name)
+        result = await db.execute(stmt)
+        return result.scalars().all()
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to sync groups: {str(e)}")
+
+
 @router.post("/groups", response_model=GroupChatResponse, status_code=201)
 @router.post("/whatsapp/groups", response_model=GroupChatResponse, status_code=201)
 async def create_group(
