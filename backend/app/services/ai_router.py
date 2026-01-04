@@ -287,14 +287,10 @@ class AIRouter:
         try:
             response = self.model.generate_content(inputs)
             
-            # Parse JSON from response
-            
-            # Parse JSON from response
             text = response.text.strip()
             logger.info(f"Gemini Raw Response: {text}")
             
             # Clean up markdown code blocks if present
-            if text.startswith("```"):
             if text.startswith("```"):
                 text = text.split("```")[1]
                 if text.startswith("json"):
