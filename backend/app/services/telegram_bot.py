@@ -440,22 +440,6 @@ class TelegramBotService:
             else:
                 chat_id = message.chat.id
                 
-                # === OFF-HOURS AUTO-REPLY ===
-                from datetime import datetime
-                current_hour = datetime.now().hour
-                is_off_hours = current_hour < 9 or current_hour >= 18
-                
-                if is_off_hours:
-                    off_hours_msg = """🌙 Вы написали в нерабочее время (9:00-18:00).
-
-Ваше сообщение получено! Я всё равно постараюсь помочь, но если вопрос требует детального ответа — напомню утром.
-
-А пока — краткий ответ:"""
-                    await bot.send_message(chat_id=chat_id, text=off_hours_msg)
-                
-                # Send "typing..." action
-                await bot.send_chat_action(chat_id=chat_id, action="typing")
-                
                 # Status Message
                 status_msg = await bot.send_message(chat_id=chat_id, text="⏳ Agent System Starting...")
                 

@@ -46,6 +46,22 @@ async def _brain_tick() -> dict:
         
         for tenant in tenants:
             try:
+                # Check Quiet Hours (22:00 - 09:00)
+                # Brain should sleep at night to avoid waking up users
+                try:
+                    import pytz
+                    from datetime import datetime
+                    tz_str = tenant.timezone or "Asia/Almaty"
+                    tz = pytz.timezone(tz_str)
+                    now_tz = datetime.now(tz)
+                    
+                    if now_tz.hour < 9 or now_tz.hour >= 22:
+                        # Skip processing for this tenant during night
+                        continue 
+                except Exception:
+                    # If timezone error, default to run (or skip - safer to run but log)
+                    pass
+
                 brain = AutonomousBrain(
                     db,
                     whatsapp,

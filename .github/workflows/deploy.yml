@@ -49,6 +49,8 @@ jobs:
           export DOMAIN=${{ env.DOMAIN }} && \
           export ENV_NAME=${{ env.ENV_NAME }} && \
           export GEMINI_API_KEY='${{ secrets.GEMINI_API_KEY }}' && \
+          export SECRET_KEY='${{ secrets.SECRET_KEY }}' && \
+          export PERPLEXITY_API_KEY='${{ secrets.PERPLEXITY_API_KEY }}' && \
           if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || touch .env; fi && \
           docker network create assistant-net 2>/dev/null || true && \
           docker compose down --remove-orphans && \

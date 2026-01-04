@@ -132,8 +132,6 @@ async def login(
 async def get_me(tenant: CurrentTenant):
     """Get current tenant info."""
     is_admin = tenant.is_admin
-    if tenant.email in ["test@test.kz"]:
-        is_admin = True
         
     return TenantResponse(
         id=str(tenant.id),

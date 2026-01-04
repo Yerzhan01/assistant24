@@ -51,8 +51,8 @@ export default function Settings() {
         }
     }, [tenant?.whatsapp_connected])
 
-    const checkWhatsAppStatus = async () => {
-        setWaStatusLoading(true)
+    const checkWhatsAppStatus = async (silent = false) => {
+        if (!silent) setWaStatusLoading(true)
         try {
             const res = await fetch('/api/v1/settings/whatsapp/status', {
                 headers: { Authorization: `Bearer ${token}` }
@@ -60,17 +60,42 @@ export default function Settings() {
             if (res.ok) {
                 const data = await res.json()
                 setWaRealStatus(data)
-                // If not authorized, auto-fetch QR
-                if (data.state === 'notAuthorized') {
+
+                // If just became authorized, clear QR
+                if (data.state === 'authorized') {
+                    setWaQrData(null)
+                    if (!tenant?.whatsapp_connected && silent) {
+                        // Reload to update global tenant state if needed, or just update local UI
+                        window.location.reload()
+                    }
+                }
+
+                // If not authorized and no QR yet (initial load), fetch QR
+                if (data.state === 'notAuthorized' && !waQrData && !silent) {
                     getWhatsAppQR()
                 }
             }
         } catch (err) {
             console.error('Failed to check WhatsApp status:', err)
         } finally {
-            setWaStatusLoading(false)
+            if (!silent) setWaStatusLoading(false)
         }
     }
+
+    // Polling for status when waiting for connection
+    useEffect(() => {
+        let interval: ReturnType<typeof setInterval>
+
+        // Poll if we are in 'notAuthorized' state (showing QR) 
+        // OR if we think we are connected but haven't verified status yet
+        if (waRealStatus?.state === 'notAuthorized') {
+            interval = setInterval(() => {
+                checkWhatsAppStatus(true)
+            }, 3000)
+        }
+
+        return () => clearInterval(interval)
+    }, [waRealStatus?.state])
 
     const getWhatsAppQR = async () => {
         setWaQrLoading(true)
@@ -345,7 +370,7 @@ export default function Settings() {
                         />
                         <p className="text-sm text-gray-500 mt-2">Откройте WhatsApp → Связанные устройства → Привязать устройство</p>
                         <button
-                            onClick={checkWhatsAppStatus}
+                            onClick={() => checkWhatsAppStatus(false)}
                             className="mt-3 text-sm text-blue-500 hover:text-blue-600 flex items-center gap-1"
                         >
                             <Loader2 className={`w-3 h-3 ${waQrLoading ? 'animate-spin' : ''}`} />
