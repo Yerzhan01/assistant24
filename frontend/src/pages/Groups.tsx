@@ -9,7 +9,8 @@ import {
     Loader2,
     Bell,
     BellOff,
-    Link
+    Link,
+    RefreshCw
 } from 'lucide-react'
 
 interface WhatsAppGroup {
@@ -40,6 +41,7 @@ export default function Groups() {
     const [selectedGroup, setSelectedGroup] = useState<WhatsAppGroup | null>(null)
     const [participants, setParticipants] = useState<GroupParticipant[]>([])
     const [searchTerm, setSearchTerm] = useState('')
+    const [syncing, setSyncing] = useState(false)
 
     const [formData, setFormData] = useState({
         name: '',
@@ -101,6 +103,25 @@ export default function Groups() {
             ])
         } finally {
             setLoading(false)
+        }
+    }
+
+    const syncGroups = async () => {
+        setSyncing(true)
+        try {
+            const res = await fetch('/api/v1/groups/sync', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            if (res.ok) {
+                const data = await res.json()
+                setGroups(data || [])
+            }
+        } catch (err) {
+            console.error('Failed to sync groups:', err)
+            alert('Ошибка синхронизации. Убедитесь что WhatsApp подключен.')
+        } finally {
+            setSyncing(false)
         }
     }
 
@@ -206,14 +227,25 @@ export default function Groups() {
                     <p className="text-gray-400 mt-1">{groups.length} групп</p>
                 </div>
 
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 
-                               text-white font-medium rounded-xl transition"
-                >
-                    <Plus className="w-5 h-5" />
-                    Новая группа
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={syncGroups}
+                        disabled={syncing}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 
+                                   disabled:opacity-50 text-white font-medium rounded-xl transition"
+                    >
+                        <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
+                        {syncing ? 'Синхронизация...' : 'Синхронизировать'}
+                    </button>
+                    <button
+                        onClick={() => setShowModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 
+                                   text-white font-medium rounded-xl transition"
+                    >
+                        <Plus className="w-5 h-5" />
+                        Новая группа
+                    </button>
+                </div>
             </div>
 
             {/* Search */}
