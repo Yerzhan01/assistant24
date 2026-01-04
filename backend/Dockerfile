@@ -2,8 +2,8 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Trigger rebuild 2026-01-04-1823 fix base_url
-ENV REBUILD_TRIGGER=202601041823
+# Trigger rebuild 2026-01-04-1830 apply new api key
+ENV REBUILD_TRIGGER=202601041830
 # Install system dependencies (gcc for potential compilation)
 RUN apt-get update && apt-get install -y \
     gcc \
