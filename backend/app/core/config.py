@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Optional
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,7 +35,8 @@ class Settings(BaseSettings):
     
     # Google Gemini AI
     gemini_api_key: Optional[str] = None
-    gemini_model: str = "gemini-3-flash-preview"
+    # Use alias to ignore stale "GEMINI_MODEL" in .env
+    gemini_model: str = Field(default="gemini-3-flash-preview", validation_alias="GEMINI_MODEL_ID")
     gemini_thinking_level: str = "medium"  # minimal, low, medium, high
     
     # WhatsApp (Green API Partner)
