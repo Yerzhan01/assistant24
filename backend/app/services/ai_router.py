@@ -584,49 +584,103 @@ class AIRouter:
             if on_status: await on_status("Executing...")
             all_responses = []
             registry = get_registry()
-        combined_message = "\n\n".join(all_responses)
-        trace.set_final_response(combined_message, success=True)
-        
-        # Store conversation as memory (async, non-blocking)
-        # 1. Store in Vector DB (RAG)
-        await self._store_conversation_memory(
-            tenant_id, user_id, message, combined_message
-        )
-        
-        if not silent_response:
-            # 2. Store in Relational DB (Chat History)
-            try:
-                from app.models.chat import Message
+            for item in intents:
+                intent = item.get("intent")
+                data = item.get("data", {})
+                confidence = item.get("confidence", 0.0)
                 
-                # User message
-                user_msg = Message(
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    is_user=True,
-                    content=message,
-                    created_at=datetime.now()
-                )
-                self.db.add(user_msg)
+                # Skip low confidence
+                if confidence < 0.3: continue
                 
-                # Bot response (1 second later to ensure order)
-                from datetime import timedelta
-                bot_msg = Message(
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    is_user=False,
-                    content=combined_message,
-                    intent=",".join([i.get("intent", "") for i in intents]),
-                    created_at=datetime.now() + timedelta(seconds=1)
-                )
-                self.db.add(bot_msg)
+                trace.start_step(f"exec_{intent}")
                 
-                # We rely on the caller (TelegramBotService) to commit, or we can flush here
-                await self.db.flush()
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).error(f"Failed to save chat history: {e}")
-        
-        return ModuleResponse(success=True, message=combined_message)
+                # Special Handlers
+                if intent == "recall":
+                    resp = await self._handle_recall(tenant_id, message, context)
+                    all_responses.append(resp.message)
+                    trace.end_step(f"exec_{intent}", {"status": "recall_done"})
+                    continue
+                    
+                if intent == "cancel_meeting":
+                    msg = "Функция отмены встреч пока недоступна."
+                    all_responses.append(msg)
+                    continue
+
+                # Module Execution
+                module = registry.get(intent)
+                if module and module in enabled_modules:
+                    instance = type(module)(self.db)
+                    
+                    # Inject context
+                    data["rag_context"] = context
+                    data["original_message"] = message
+                    
+                    try:
+                        resp = await instance.process(data, tenant_id, user_id, self.language)
+                        if resp.message:
+                            all_responses.append(resp.message)
+                        elif not resp.success:
+                             all_responses.append(f"⚠️ Ошибка модуля {intent}")
+                    except Exception as e:
+                        logger.error(f"Module {intent} failed: {e}")
+                        all_responses.append(f"❌ Ошибка: {str(e)}")
+                
+                trace.end_step(f"exec_{intent}")
+
+            # 6. Finalize Response
+            combined_message = "\n\n".join(all_responses)
+            if not combined_message:
+                 combined_message = t("bot.unknown_intent", self.language)
+
+            trace.set_final_response(combined_message, success=True)
+            
+            # Store conversation as memory (async, non-blocking)
+            # 1. Store in Vector DB (RAG)
+            await self._store_conversation_memory(
+                tenant_id, user_id, message, combined_message
+            )
+            
+            if not silent_response:
+                # 2. Store in Relational DB (Chat History)
+                try:
+                    from app.models.chat import Message
+                    
+                    # User message
+                    user_msg = Message(
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        is_user=True,
+                        content=message,
+                        intent="user_input",
+                        created_at=datetime.now()
+                    )
+                    self.db.add(user_msg)
+                    
+                    # Bot response (1 second later to ensure order)
+                    from datetime import timedelta
+                    bot_msg = Message(
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        is_user=False,
+                        content=combined_message,
+                        intent=",".join([i.get("intent", "") for i in intents]),
+                        created_at=datetime.now() + timedelta(seconds=1)
+                    )
+                    self.db.add(bot_msg)
+                    
+                    # We rely on the caller (TelegramBotService) to commit, or we can flush here
+                    await self.db.flush()
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Failed to save chat history: {e}")
+            
+            return ModuleResponse(success=True, message=combined_message)
+
+        except Exception as e:
+            trace.log_error("CriticalPipelineError", str(e))
+            return ModuleResponse(success=False, message=f"Системная ошибка: {str(e)}")
+        finally:
+            await trace.save()
     
     async def _handle_schedule_meeting(
         self,
