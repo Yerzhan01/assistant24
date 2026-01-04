@@ -49,6 +49,11 @@ celery_app.conf.update(
             "task": "send_morning_briefing",
             "schedule": crontab(hour=9, minute=0),
         },
+        # Evening Report - daily at 23:00
+        "send-daily-report": {
+            "task": "send_daily_report",
+            "schedule": crontab(hour=23, minute=0),
+        },
         # Debt collection check - every 4 hours
         "check-overdue-invoices": {
             "task": "check_overdue_invoices",

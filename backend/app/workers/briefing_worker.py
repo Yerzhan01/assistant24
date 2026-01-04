@@ -10,6 +10,7 @@ from app.core.database import async_session_maker
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.services.morning_briefing import MorningBriefingService
+from app.services.daily_report import DailyReportService
 from app.services.debt_collector import DebtCollectorService
 from app.services.whatsapp_bot import WhatsAppBotService
 
@@ -23,6 +24,15 @@ def send_morning_briefing() -> dict:
     Scheduled for 09:00 every day.
     """
     return asyncio.run(_send_morning_briefing())
+
+
+@shared_task(name="send_daily_report")
+def send_daily_report() -> dict:
+    """
+    Daily evening report (summary of day).
+    Scheduled for 23:00 kz.
+    """
+    return asyncio.run(_send_daily_report())
 
 
 async def _send_morning_briefing() -> dict:
@@ -84,6 +94,65 @@ async def _send_morning_briefing() -> dict:
                 logger.error(f"Failed to send briefing to tenant {tenant.id}: {e}")
                 results["failed"] += 1
     
+    return results
+
+
+async def _send_daily_report() -> dict:
+    """Send evening report to all active tenants."""
+    results = {"sent": 0, "failed": 0, "skipped": 0}
+    
+    async with async_session_maker() as db:
+        from sqlalchemy import select
+        
+        # Get active tenants
+        stmt = select(Tenant).where(
+            Tenant.is_active == True,
+            Tenant.greenapi_instance_id.isnot(None)
+        )
+        result = await db.execute(stmt)
+        tenants = result.scalars().all()
+        
+        whatsapp = WhatsAppBotService()
+        
+        for tenant in tenants:
+            try:
+                # Get owner
+                stmt = select(User).where(
+                    User.tenant_id == tenant.id,
+                    User.role == "owner"
+                )
+                result = await db.execute(stmt)
+                owner = result.scalar_one_or_none()
+                
+                if not owner or not owner.whatsapp_phone:
+                    results["skipped"] += 1
+                    continue
+                
+                # Generate report
+                service = DailyReportService(
+                    db,
+                    api_key=tenant.gemini_api_key,
+                    language=tenant.language or "ru"
+                )
+                
+                user_name = owner.name or "Босс"
+                report = await service.generate_report(tenant.id, user_name)
+                
+                # Send
+                await whatsapp.send_message(
+                    tenant.greenapi_instance_id,
+                    tenant.greenapi_token,
+                    owner.whatsapp_phone,
+                    report
+                )
+                
+                results["sent"] += 1
+                logger.info(f"Evening report sent to tenant {tenant.id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to send evening report to {tenant.id}: {e}")
+                results["failed"] += 1
+                
     return results
 
 
