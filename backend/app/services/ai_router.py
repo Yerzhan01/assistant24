@@ -304,8 +304,8 @@ class AIRouter:
                 msg_lower = message.lower().strip()
                 wa_keywords = ["напиши", "отправь", "скажи", "жаз", "жібер", "write", "send"]
                 
-                # If message starts with "send X" and intent is NOT whatsapp
-                is_messaging_request = any(msg_lower.startswith(kw) for kw in wa_keywords)
+                # If message contains messaging keywords (not just starts with)
+                is_messaging_request = any(kw in msg_lower for kw in wa_keywords)
                 
                 current_intents = result.get("intents", [])
                 first_intent = current_intents[0].get("intent") if current_intents else "unknown"
