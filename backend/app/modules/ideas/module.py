@@ -129,6 +129,8 @@ class IdeasModule(BaseModule):
             return """
 Определяй бизнес-идеи.
 
+ВАЖНО: Если пользователь просит отправить сообщение, создать задачу или контакт — ЭТО НЕ ИДЕЯ.
+
 Извлекай:
 - content: содержание идеи (обязательно)
 - category: категория (business, marketing, product, operations, other) - по умолчанию "business"
@@ -136,13 +138,11 @@ class IdeasModule(BaseModule):
 
 Примеры:
 - "Идея: запустить рекламу в Instagram" → {"content": "Запустить рекламу в Instagram", "category": "marketing", "priority": "high"}
-- "Надо сделать мобильное приложение" → {"content": "Сделать мобильное приложение", "category": "product", "priority": "medium"}
-- "Хочу открыть новую точку" → {"content": "Открыть новую точку", "category": "business", "priority": "high"}
+- "Пришла мысль сделать мобильное приложение" → {"content": "Сделать мобильное приложение", "category": "product", "priority": "medium"}
 """
     
     def get_intent_keywords(self) -> List[str]:
         return [
-            "идея", "нужно", "надо", "хочу", "планирую",
-            "сделать", "создать", "запустить",
-            "идея", "керек", "жасау", "құру", "бастау"
+            "идея", "мысль", "инсайт",
+            "идея", "ой", "пікір"
         ]
