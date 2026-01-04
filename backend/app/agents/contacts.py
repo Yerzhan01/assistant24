@@ -26,6 +26,7 @@ class ContactsAgent(BaseAgent):
         - search_contact: найти контакт (query)
         - create_contact: создать контакт (name, phone, email)
         - count_contacts: посчитать контакты
+        - send_message_to_contact: отправить сообщение контакту через WhatsApp (name, message)
         
         УМНЫЕ УТОЧНЕНИЯ:
         
@@ -107,6 +108,15 @@ class ContactsAgent(BaseAgent):
                     "segment": {"type": "string", "description": "Сегмент: client, partner, supplier, investor"}
                 },
                 function=self._set_contact_segment
+            ),
+            AgentTool(
+                name="send_message_to_contact",
+                description="Отправить сообщение контакту через WhatsApp. Параметры: name (имя контакта), message (текст сообщения).",
+                parameters={
+                    "name": {"type": "string", "description": "Имя контакта"},
+                    "message": {"type": "string", "description": "Текст сообщения"}
+                },
+                function=self._send_message_to_contact
             ),
         ]
         
@@ -285,5 +295,54 @@ class ContactsAgent(BaseAgent):
             emoji = {"client": "🎯", "partner": "🤝", "supplier": "📦", "investor": "💰"}.get(segment_lower, "📒")
             return f"✅ {contact.name} → {emoji} {segment_lower}"
         return f"❌ Контакт '{name}' не найден"
+    
+    async def _send_message_to_contact(self, name: str = "", message: str = "") -> str:
+        """Send a WhatsApp message to a contact."""
+        import re as regex
+        
+        if not name:
+            return "❌ Укажите имя контакта"
+        if not message:
+            return "❌ Укажите текст сообщения"
+        
+        # Find contact
+        stmt = select(Contact).where(
+            Contact.tenant_id == self.tenant_id,
+            Contact.name.ilike(f"%{name}%")
+        ).limit(1)
+        result = await self.db.execute(stmt)
+        contact = result.scalar_one_or_none()
+        
+        if not contact:
+            return f"❌ Контакт '{name}' не найден"
+        
+        if not contact.phone or contact.phone == "0":
+            return f"❌ У контакта {contact.name} нет номера телефона"
+        
+        # Get tenant for WhatsApp credentials
+        from app.models.tenant import Tenant
+        tenant = await self.db.get(Tenant, self.tenant_id)
+        
+        if not tenant or not tenant.greenapi_instance_id or not tenant.greenapi_token:
+            return "❌ WhatsApp не подключен. Настройте в разделе Настройки."
+        
+        # Format phone for WhatsApp
+        phone = regex.sub(r'[^\d]', '', contact.phone)
+        if phone.startswith('8') and len(phone) == 11:
+            phone = '7' + phone[1:]
+        
+        # Send via WhatsApp
+        try:
+            from app.services.whatsapp_bot import get_whatsapp_service
+            whatsapp = get_whatsapp_service()
+            await whatsapp.send_message(
+                tenant.greenapi_instance_id,
+                tenant.greenapi_token,
+                f"{phone}@c.us",
+                message
+            )
+            return f"✅ Сообщение отправлено {contact.name}: \"{message}\""
+        except Exception as e:
+            return f"❌ Ошибка отправки: {str(e)}"
 
 
