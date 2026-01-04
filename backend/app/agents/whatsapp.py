@@ -147,18 +147,68 @@ class WhatsAppAgent(BaseAgent):
             
             lines = [
                 f"📊 **Статистика WhatsApp:**\n",
-                f"💬 Всего чатов: {total_chats}",
-                f"👥 Групп: {len(groups)}",
-                f"👤 Контактов: {len(contacts)}",
+    async def _get_chat_stats(self) -> str:
+        """Get message statistics for today."""
+        from app.models.chat_message import ChatMessage
+        from sqlalchemy import func
+        from datetime import datetime, timedelta
+        
+        try:
+            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # Count total messages today
+            stmt = select(func.count()).select_from(ChatMessage).where(
+                ChatMessage.tenant_id == self.tenant_id,
+                ChatMessage.created_at >= today
+            )
+            total_result = await self.db.execute(stmt)
+            total_today = total_result.scalar_one() or 0
+            
+            # Get unique senders today (by chat_id)
+            # We group by chat_id and get count per chat
+            stmt = select(
+                ChatMessage.chat_id, 
+                func.count(ChatMessage.id)
+            ).where(
+                ChatMessage.tenant_id == self.tenant_id,
+                ChatMessage.created_at >= today,
+                ChatMessage.role == "user" # Only incoming
+            ).group_by(ChatMessage.chat_id).limit(10)
+            
+            result = await self.db.execute(stmt)
+            active_chats = result.all()
+            
+            lines = [
+                f"📊 Статистика за сегодня ({today.strftime('%d.%m.%Y')}):",
+                f"📨 Всего сообщений: {total_today}",
+                f"🗣 Активных чатов: {len(active_chats)}",
             ]
             
-            # Show recent chats
-            if chats[:5]:
-                lines.append("\n📱 Последние активные:")
-                for chat in chats[:5]:
-                    name = chat.get("name", "") or chat.get("id", "")[:15]
-                    lines.append(f"  • {name}")
-            
+            if active_chats:
+                lines.append("\n📝 Активность по чатам:")
+                
+                # Fetch names for these chat_ids
+                from app.models.contact import Contact
+                
+                for chat_id, msg_count in active_chats:
+                    # Try to find contact name
+                    clean_phone = chat_id.replace("@c.us", "").replace("@g.us", "")
+                    # Try contact lookup
+                    contact_stmt = select(Contact).where(
+                        Contact.tenant_id == self.tenant_id,
+                        Contact.phone.ilike(f"%{clean_phone}%")
+                    ).limit(1)
+                    contact_res = await self.db.execute(contact_stmt)
+                    contact = contact_res.scalar_one_or_none()
+                    
+                    name = contact.name if contact else f"{clean_phone}"
+                    if chat_id.endswith("@g.us"):
+                        name = f"Группа {name}"
+                        
+                    lines.append(f"  • {name}: {msg_count} сообщ.")
+            else:
+                lines.append("\n📭 Сообщений сегодня не было.")
+                
             return "\n".join(lines)
             
         except Exception as e:

@@ -1100,6 +1100,25 @@ class WhatsAppBotService:
         if not api_key:
             response_text = t("bot.error", lang)
         else:
+            # === MEMORY FIX: Save User Message ===
+            try:
+                # Format content with name for groups
+                saved_content = message_text
+                if is_group:
+                    saved_content = f"[{sender_name}]: {message_text}"
+                
+                from app.models.chat_message import ChatMessage
+                incoming_msg = ChatMessage(
+                    tenant_id=tenant.id,
+                    chat_id=str(chat_id),
+                    role="user",
+                    content=saved_content
+                )
+                db.add(incoming_msg)
+                await db.commit() # Save immediately so AI can query it if needed
+            except Exception as e:
+                logger.error(f"Failed to save incoming message history: {e}")
+
             # Process via AI Router
             ai_router = AIRouter(
                 db=db,
