@@ -1,0 +1,7 @@
+{$DOMAIN:link-it.tech} {
+    reverse_proxy frontend:3000
+}
+
+www.{$DOMAIN:link-it.tech} {
+    redir https://{$DOMAIN:link-it.tech}{uri}
+}

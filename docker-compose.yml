@@ -73,6 +73,24 @@ services:
       start_period: 40s
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
 
+  # Caddy Reverse Proxy (automatic HTTPS)
+  caddy:
+    image: caddy:2-alpine
+    container_name: assistant24-caddy-${ENV_NAME:-prod}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - assistant-net
+      - default
+    depends_on:
+      - frontend
+
   # Frontend (React)
   frontend:
     build:
@@ -80,8 +98,8 @@ services:
       dockerfile: Dockerfile
     container_name: assistant24-frontend-${ENV_NAME:-prod}
     restart: unless-stopped
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+    expose:
+      - "3000"
     networks:
       - assistant-net
       - default
@@ -147,3 +165,5 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  caddy_data:
+  caddy_config:
