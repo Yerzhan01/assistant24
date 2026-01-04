@@ -58,6 +58,13 @@ jobs:
           docker network create assistant-net 2>/dev/null || true && \
           docker compose down --remove-orphans && \
           docker compose up -d --build"
+        
+        # Sync DB password (fix for persistent volume issue)
+        echo "🔄 Syncing database password..."
+        ssh -i ~/.ssh/id_ed25519 $USER@$HOST "cd $PROJECT_PATH && \
+          sleep 10 && \
+          docker exec assistant24-db-prod psql -U postgres -c \"ALTER USER postgres WITH PASSWORD 'postgres';\" && \
+          docker compose restart backend celery-worker celery-beat"
 
     - name: Check Container Status
       env:
