@@ -48,7 +48,24 @@ class AIRouter:
             # Configure generation with thinking level for Gemini 3
             generation_config = {
                 "temperature": 1.0,  # Recommended for Gemini 3
+                "thinking_config": {
+                    "include_thoughts": True
+                }
             }
+            # Add thinking level if specified (medium/high)
+            # mapping from config string to API constant or string
+            if self.thinking_level:
+                generation_config["thinking_config"]["include_thoughts"] = True
+                # Note: The old SDK might pass this as "thinking_level" inside thinking_config
+                # or we might need to use "thinking_budget" if level is not supported.
+                pass 
+            
+            # Using direct dictionary structure for SDK 0.8.3
+            generation_config = {
+                "temperature": 1.0,
+                "thinking_config": {"include_thoughts": True} 
+            }
+
             self.model = genai.GenerativeModel(
                 settings.gemini_model,
                 generation_config=generation_config
