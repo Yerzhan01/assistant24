@@ -44,6 +44,9 @@ jobs:
           --exclude '.git' --exclude 'venv' --exclude 'node_modules' --exclude '__pycache__' \
           ./ $USER@$HOST:$PROJECT_PATH/
 
+        # Install Docker if not present
+        ssh -i ~/.ssh/id_ed25519 $USER@$HOST "command -v docker || (curl -fsSL https://get.docker.com | sh)"
+
         # Deploy
         ssh -i ~/.ssh/id_ed25519 $USER@$HOST "cd $PROJECT_PATH && \
           export DOMAIN=${{ env.DOMAIN }} && \
