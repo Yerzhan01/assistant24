@@ -272,6 +272,48 @@ async def update_group(
     return group
 
 
+@router.post("/groups/{group_id}/activate", response_model=GroupChatResponse)
+async def activate_group(
+    group_id: UUID,
+    tenant=Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    """Activate a group (move from archive to active)."""
+    stmt = select(GroupChat).where(
+        and_(GroupChat.id == group_id, GroupChat.tenant_id == tenant.id)
+    )
+    result = await db.execute(stmt)
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    group.is_active = True
+    await db.commit()
+    await db.refresh(group)
+    return group
+
+
+@router.post("/groups/{group_id}/archive", response_model=GroupChatResponse)
+async def archive_group(
+    group_id: UUID,
+    tenant=Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    """Archive a group (move from active to archive)."""
+    stmt = select(GroupChat).where(
+        and_(GroupChat.id == group_id, GroupChat.tenant_id == tenant.id)
+    )
+    result = await db.execute(stmt)
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    group.is_active = False
+    await db.commit()
+    await db.refresh(group)
+    return group
+
+
 @router.delete("/groups/{group_id}", status_code=204)
 async def delete_group(
     group_id: UUID,
