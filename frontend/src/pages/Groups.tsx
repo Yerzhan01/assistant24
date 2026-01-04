@@ -66,41 +66,8 @@ export default function Groups() {
         } catch (err) {
             console.error('Failed to fetch groups:', err)
             // Demo data
-            setGroups([
-                {
-                    id: '1',
-                    name: 'Команда продаж',
-                    description: 'Рабочий чат отдела продаж',
-                    participant_count: 12,
-                    owner_phone: '+77001234567',
-                    notifications_enabled: true,
-                    last_message: 'Отчёт за неделю готов',
-                    last_message_time: '2 часа назад',
-                    created_at: '2024-01-15'
-                },
-                {
-                    id: '2',
-                    name: 'Клиенты VIP',
-                    description: 'Группа для VIP клиентов',
-                    participant_count: 25,
-                    owner_phone: '+77001234567',
-                    notifications_enabled: false,
-                    last_message: 'Спасибо за скидку!',
-                    last_message_time: 'вчера',
-                    created_at: '2024-02-10'
-                },
-                {
-                    id: '3',
-                    name: 'Партнёры',
-                    description: 'Чат с бизнес-партнёрами',
-                    participant_count: 8,
-                    owner_phone: '+77001234567',
-                    notifications_enabled: true,
-                    last_message: 'Договор подписан',
-                    last_message_time: '3 дня назад',
-                    created_at: '2024-03-01'
-                }
-            ])
+            setGroups([])
+            alert('Не удалось загрузить группы')
         } finally {
             setLoading(false)
         }
@@ -182,11 +149,7 @@ export default function Groups() {
             }
         } catch (err) {
             // Demo data
-            setParticipants([
-                { phone: '+77001234567', name: 'Асхат', is_admin: true },
-                { phone: '+77007654321', name: 'Марат', is_admin: false },
-                { phone: '+77009876543', name: 'Айгерим', is_admin: false },
-            ])
+            setParticipants([])
         }
     }
 
