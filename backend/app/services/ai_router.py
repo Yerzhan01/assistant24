@@ -656,6 +656,20 @@ class AIRouter:
                     )
                     self.db.add(user_msg)
                     
+                    # Dual-Write: Unified Interaction (User)
+                    from app.models.interaction import UnifiedInteraction, InteractionSource, InteractionRole
+                    user_interaction = UnifiedInteraction(
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        session_id=f"web:{user_id or 'anon'}",
+                        source=InteractionSource.WEB.value,
+                        role=InteractionRole.USER.value,
+                        content=message,
+                        metadata_={"intent": "user_input"},
+                        created_at=user_msg.created_at
+                    )
+                    self.db.add(user_interaction)
+                    
                     # Bot response (1 second later to ensure order)
                     from datetime import timedelta
                     bot_msg = Message(
@@ -667,6 +681,19 @@ class AIRouter:
                         created_at=datetime.now() + timedelta(seconds=1)
                     )
                     self.db.add(bot_msg)
+                    
+                    # Dual-Write: Unified Interaction (Bot)
+                    bot_interaction = UnifiedInteraction(
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        session_id=f"web:{user_id or 'anon'}",
+                        source=InteractionSource.WEB.value,
+                        role=InteractionRole.ASSISTANT.value,
+                        content=combined_message,
+                        metadata_={"intents": intents},
+                        created_at=bot_msg.created_at
+                    )
+                    self.db.add(bot_interaction)
                     
                     # We rely on the caller (TelegramBotService) to commit, or we can flush here
                     await self.db.flush()

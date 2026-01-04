@@ -110,7 +110,7 @@ class ContactService:
         tenant_id: UUID,
         name: str,
         phone:Optional[ str ] = None
-    ) ->Optional[ tuple[Contact ], bool]:
+    ) -> tuple[Optional[Contact], bool]:
         """
         Get existing contact or create a new one.
         Returns (contact, was_created).

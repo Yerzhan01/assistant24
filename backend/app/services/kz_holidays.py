@@ -108,21 +108,15 @@ class KazakhstanHolidays:
                 holiday_type=HolidayType.NATIONAL
             ),
             Holiday(
-                name_ru="День Первого Президента",
-                name_kz="Тұңғыш Президент күні",
-                date=date(year, 12, 1),
+                name_ru="День Республики",
+                name_kz="Республика күні",
+                date=date(year, 10, 25),
                 holiday_type=HolidayType.NATIONAL
             ),
             Holiday(
                 name_ru="День Независимости",
                 name_kz="Тәуелсіздік күні",
                 date=date(year, 12, 16),
-                holiday_type=HolidayType.NATIONAL
-            ),
-            Holiday(
-                name_ru="День Независимости (2-й день)",
-                name_kz="Тәуелсіздік күні (2-ші күн)",
-                date=date(year, 12, 17),
                 holiday_type=HolidayType.NATIONAL
             ),
         ]
@@ -144,7 +138,7 @@ class KazakhstanHolidays:
                 "oraza": date(2025, 3, 30),
             },
             2026: {
-                "kurban": date(2026, 5, 26),
+                "kurban": date(2026, 5, 27), # Corrected per eGov
                 "oraza": date(2026, 3, 20),
             },
             2027: {

@@ -365,11 +365,13 @@ class MeetingNegotiator:
         negotiation.status = NegotiationStatus.CONFIRMED.value
         
         # Create meeting
+        # Create meeting
         meeting = Meeting(
             tenant_id=negotiation.tenant_id,
             title=negotiation.meeting_title,
             description=negotiation.meeting_notes,
-            scheduled_at=selected_slot,
+            start_time=selected_slot,
+            end_time=selected_slot + timedelta(minutes=60), # Default 1 hour
             reminder_minutes=60,
             attendee_name=negotiation.contact.name if negotiation.contact else None
         )

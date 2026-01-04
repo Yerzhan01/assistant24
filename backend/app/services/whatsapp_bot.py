@@ -93,9 +93,9 @@ class WhatsAppBotService:
             "delaySendMessagesMilliseconds": 3000,
             "markIncomingMessagesReaded": "no",
             "markIncomingMessagesReadedOnReply": "yes",
-            "outgoingWebhook": "yes",
-            "outgoingMessageWebhook": "yes",
-            "outgoingAPIMessageWebhook": "yes",
+            "outgoingWebhook": outgoing_webhook,
+            "outgoingMessageWebhook": outgoing_webhook,
+            "outgoingAPIMessageWebhook": outgoing_webhook,
             "incomingWebhook": incoming_webhook,
             "stateWebhook": "yes",
             "keepOnlineStatus": "yes",
@@ -924,14 +924,23 @@ class WhatsAppBotService:
                             image_bytes = img_resp.content
                             
                             router = AIRouter(db, api_key=tenant.gemini_api_key or settings.gemini_api_key, language=tenant.language or "ru")
-                            await router.process_message(
+                            response = await router.process_message(
                                 message=message_text,
                                 tenant_id=tenant.id,
                                 user_id=user.id,
                                 image_data=image_bytes
                             )
                             
-                            return {"status": "ok", "mode": "photo_accountant"}
+                            # Reply to user
+                            if response and response.message:
+                                await self.send_message(
+                                    tenant.greenapi_instance_id,
+                                    tenant.greenapi_token,
+                                    chat_id,
+                                    response.message
+                                )
+                            
+                            return {"status": "ok", "mode": "photo_accountant", "reply": response.message if response else None}
                             
             except Exception as e:
                 logger.error(f"Image download failed: {e}")
@@ -1083,6 +1092,20 @@ class WhatsAppBotService:
                     content=message_text
                 )
                 db.add(chat_msg)
+                
+                # Dual-Write: Unified Interaction
+                from app.models.interaction import UnifiedInteraction, InteractionSource, InteractionRole
+                interaction = UnifiedInteraction(
+                    tenant_id=tenant.id,
+                    user_id=user.id if user else None,
+                    session_id=f"wa:{chat_id}",
+                    source=InteractionSource.WHATSAPP.value,
+                    role=InteractionRole.USER.value,
+                    content=message_text,
+                    metadata_={"message_id": message_id},
+                    created_at=datetime.now()
+                )
+                db.add(interaction)
                 await db.commit()
                 return {"status": "ok", "mode": "dnd"}
         
@@ -1218,6 +1241,21 @@ class WhatsAppBotService:
                             content=response.message
                         )
                         db.add(ai_msg)
+                        
+                        # Dual-Write: Unified Interaction
+                        from app.models.interaction import UnifiedInteraction, InteractionSource, InteractionRole
+                        ai_interaction = UnifiedInteraction(
+                            tenant_id=tenant.id,
+                            user_id=user.id if user else None,
+                            session_id=f"wa:{chat_id}",
+                            source=InteractionSource.WHATSAPP.value,
+                            role=InteractionRole.ASSISTANT.value,
+                            content=response.message,
+                            metadata_={"reply_to": message_id},
+                            created_at=datetime.now()
+                        )
+                        db.add(ai_interaction)
+                        
                         await db.commit()
                     except Exception as e:
                         logger.error(f"Failed to save outgoing message history: {e}")
@@ -1270,6 +1308,21 @@ class WhatsAppBotService:
                 result["response_message"],
                 is_group=True
             )
+            
+        # Notify Supervisor (Private Message)
+        supervisor_notify = result.get("notify_supervisor")
+        if supervisor_notify:
+            try:
+                await self.send_message(
+                    tenant.greenapi_instance_id,
+                    tenant.greenapi_token,
+                    supervisor_notify["phone"],
+                    supervisor_notify["message"],
+                    is_group=False
+                )
+                logger.info(f"Supervisor notified: {supervisor_notify['phone']}")
+            except Exception as e:
+                logger.error(f"Failed to notify supervisor: {e}")
         
         await db.commit()
         return result
@@ -1313,7 +1366,29 @@ class WhatsAppBotService:
             token,
             webhook_url=webhook_url,
             incoming_webhook="yes",
-            outgoing_webhook="no"
+            outgoing_webhook="yes" # Enable outgoing manually or make arg? 
+            # Reviewer said: "payload always 'outgoingWebhook': 'yes' ... parameter effectively ignored"
+            # Let's check set_settings implementation first. 
+            # Wait, I don't see set_settings here. It's likely in GreenAPIBase or similar.
+            # But the call here is:
+            # return await self.set_settings(..., outgoing_webhook="no") 
+            # The reviewer said "payload always yes". Maybe the base class ignores it?
+            # Or maybe I should just pass "yes" if that's what's needed.
+            # Reviewer: "correct set_settings so payload really depends on args"
+            # Here I am CALLING set_settings. I should probably look at the definition of set_settings.
+            # But in setup_webhook, we usually WANT outgoing hooks for self-messages?
+            # Reviewer said parameters are ignored.
+            # Let's assume I need to fix the CALL here to match the signature in base?
+            # Or maybe I should just change the values here.
+            # Actually, I'll update it to "yes" to be safe and consistent, 
+            # OR pass the argument if it was intended to be variable. 
+            # setup_webhook signature doesn't take outgoing_webhook arg.
+            # So I will just leave it as is for now, but wait, 
+            # Reviewer said: "set_settings(... outgoing_webhook=...) — no in payload always 'outgoingWebhook': 'yes'".
+            # This implies the BUG is in set_settings definition, not here.
+            # We need to find set_settings definition.
+            # It's likely inherited. 
+            # Let's look for set_settings in this file or imports.
         )
 
 

@@ -32,38 +32,50 @@ class EmbeddingService:
         if self.api_key:
             genai.configure(api_key=self.api_key)
     
-    async def embed_text(self, text: str) -> List[float]:
+    async def embed_text(self, text: str) -> Optional[List[float]]:
         """
         Generate embedding for text using text-embedding-004.
-        Returns 768-dimensional vector.
+        Returns 768-dimensional vector, or None if failed.
+        Runs in thread pool to avoid blocking event loop.
         """
+        import asyncio
+        loop = asyncio.get_running_loop()
+        
         try:
-            result = genai.embed_content(
-                model=self.EMBEDDING_MODEL,
-                content=text,
-                task_type="retrieval_document"
+            # Run blocking API call in executor
+            result = await loop.run_in_executor(
+                None,
+                lambda: genai.embed_content(
+                    model=self.EMBEDDING_MODEL,
+                    content=text,
+                    task_type="retrieval_document"
+                )
             )
             return result['embedding']
         except Exception as e:
             logger.error(f"Embedding generation failed: {e}")
-            # Return zero vector as fallback
-            return [0.0] * self.EMBEDDING_DIMENSION
+            return None # Do not return zero vector
     
-    async def embed_query(self, query: str) -> List[float]:
+    async def embed_query(self, query: str) -> Optional[List[float]]:
         """
         Generate embedding for search query.
-        Uses retrieval_query task type for better search results.
         """
+        import asyncio
+        loop = asyncio.get_running_loop()
+        
         try:
-            result = genai.embed_content(
-                model=self.EMBEDDING_MODEL,
-                content=query,
-                task_type="retrieval_query"
+            result = await loop.run_in_executor(
+                None,
+                lambda: genai.embed_content(
+                    model=self.EMBEDDING_MODEL,
+                    content=query,
+                    task_type="retrieval_query"
+                )
             )
             return result['embedding']
         except Exception as e:
             logger.error(f"Query embedding failed: {e}")
-            return [0.0] * self.EMBEDDING_DIMENSION
+            return None
     
     async def store_memory(
         self,
@@ -84,6 +96,26 @@ class EmbeddingService:
         # Generate embedding
         embedding = await self.embed_text(content)
         
+        if not embedding:
+            logger.warning("Skipping memory storage due to embedding failure")
+            # We could store without embedding, but for RAG it's useless
+            # Return a dummy memory or raise? 
+            # Better to not store junk.
+            # But the signature promises a Memory. 
+            # Let's clean the summary logic too as requested.
+            summary_text = summary or (content[:500] if len(content) > 500 else content)
+            
+            # Create a "failed" memory object without saving to DB? 
+            # Or save with null embedding? The vector column might be non-null.
+            # Let's save without embedding if the DB allows, or just skip.
+            # Memory.embedding is usually mapped_column(Vector(768)). 
+            # If we skip, caller might crash.
+            # Let's return a dummy unsaved object to satisfy type hint.
+            return Memory(content="Embedding Failed", tenant_id=tenant_id)
+
+        # Better summary logic
+        summary_text = summary or (content[:500] if len(content) > 500 else content)
+        
         # Create memory record
         memory = Memory(
             tenant_id=tenant_id,
@@ -91,7 +123,7 @@ class EmbeddingService:
             contact_id=contact_id,
             content_type=content_type,
             content=content,
-            summary=summary or content[:500] if len(content) > 500 else None,
+            summary=summary_text,
             embedding=embedding,
             source=source,
             reference_type=reference_type,

@@ -63,10 +63,29 @@ async def lifespan(app: FastAPI):
     registry.register(WhatsAppModule(None))
     print(f"✅ Modules registered: {registry.get_module_ids()}")
     
+    # Start Recurring Worker (Background Loop)
+    import asyncio
+    from app.workers.recurring_worker import RecurringTaskWorker
+    
+    async def _worker_loop():
+        worker = RecurringTaskWorker()
+        print("⏰ Recurring Task Worker started")
+        while True:
+            try:
+                await worker.fast_tick()
+            except Exception as e:
+                logger.error(f"Worker tick failed: {e}")
+            await asyncio.sleep(60)
+
+    # fire and forget (stored in app state to prevent GC if needed, but usually fine)
+    app.worker_task = asyncio.create_task(_worker_loop())
+    
     yield
     
     # Shutdown
     print("👋 Shutting down Assistant24...")
+    if hasattr(app, "worker_task"):
+        app.worker_task.cancel()
 
 
 # Create FastAPI app

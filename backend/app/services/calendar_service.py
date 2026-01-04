@@ -32,15 +32,16 @@ class CalendarService:
         expand_recurring: bool = True
     ) -> List[Dict[str, Any]]:
         """
-        Get events within a date range.
+        Get events within a date range using overlap logic.
         Optionally expands recurring events into instances.
         """
-        # Base query
+        # Overlap logic: Event starts before range ends AND Event ends after range starts
+        # coalesce(end_time, start_time) checks if end_time matches range
         stmt = select(Meeting).where(
             and_(
                 Meeting.tenant_id == tenant_id,
-                Meeting.start_time >= start_date,
-                Meeting.start_time <= end_date
+                Meeting.start_time < end_date,
+                func.coalesce(Meeting.end_time, Meeting.start_time) > start_date
             )
         )
         
@@ -104,10 +105,10 @@ class CalendarService:
                 Meeting.tenant_id == tenant_id,
                 Meeting.recurrence_type != RecurrenceType.NONE.value,
                 Meeting.parent_meeting_id.is_(None),
-                Meeting.start_time < start_date,
+                Meeting.start_time < end_date, # Optimization: must start before end of range
                 or_(
                     Meeting.recurrence_end_date.is_(None),
-                    Meeting.recurrence_end_date >= start_date
+                    Meeting.recurrence_end_date >= start_date # Optimization: must end after start of range
                 )
             )
         )
@@ -131,6 +132,7 @@ class CalendarService:
         max_instances: int = 100
     ) -> List[Dict[str, Any]]:
         """Generate instances for a recurring meeting within date range."""
+        from dateutil.relativedelta import relativedelta
         instances = []
         
         current = meeting.start_time
@@ -138,39 +140,49 @@ class CalendarService:
         rec_type = meeting.recurrence_type
         interval = meeting.recurrence_interval or 1
         
-        # Calculate time deltas
+        # Calculate recurrence delta using dateutil for accuracy
         if rec_type == RecurrenceType.DAILY.value:
-            delta = timedelta(days=interval)
+            delta = relativedelta(days=interval)
         elif rec_type == RecurrenceType.WEEKLY.value:
-            delta = timedelta(weeks=interval)
+            delta = relativedelta(weeks=interval)
         elif rec_type == RecurrenceType.BIWEEKLY.value:
-            delta = timedelta(weeks=2)
+            delta = relativedelta(weeks=2)
         elif rec_type == RecurrenceType.MONTHLY.value:
-            delta = timedelta(days=30 * interval)  # Approximation
+            delta = relativedelta(months=interval)
         elif rec_type == RecurrenceType.YEARLY.value:
-            delta = timedelta(days=365 * interval)
+            delta = relativedelta(years=interval)
         else:
             return []
         
         count = 0
+        # Fast-forward optimization could be added here, but careful with Monthly logic
+        
         while current <= end_date and count < max_instances:
-            # Check end conditions
+            # Check recurrence end conditions
             if meeting.recurrence_end_date and current > meeting.recurrence_end_date:
                 break
             if meeting.recurrence_count and count >= meeting.recurrence_count:
                 break
             
-            # Add if in range
-            if current >= start_date:
+            # Add if in range (Overlap logic)
+            instance_end = current + duration
+            # If (Start < EndRange) AND (End > StartRange)
+            if current < end_date and instance_end > start_date:
                 instance = self._meeting_to_dict(meeting)
+                instance["id"] = f"{meeting.id}_{current.strftime('%Y%m%d')}" # Virtual ID
                 instance["start_time"] = current.isoformat()
-                instance["end_time"] = (current + duration).isoformat()
+                instance["end_time"] = instance_end.isoformat()
                 instance["is_instance"] = True
                 instance["instance_date"] = current.isoformat()
                 instances.append(instance)
             
             current += delta
-            count += 1
+            
+            # Safety break for infinite loops if delta is zero
+            if delta.days == 0 and delta.months == 0 and delta.years == 0:
+                break
+                
+            count += 1 # In real RRULE, we count occurrences, not purely loops. Simplification here.
         
         return instances
     

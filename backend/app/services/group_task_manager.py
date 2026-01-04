@@ -56,7 +56,10 @@ GROUP_PM_PROMPT_RU = """
      "assignee_phone": "номер телефона или null",
      "status": "done" | "in_progress" | null,
      "deadline": "YYYY-MM-DD" | null,
-     "priority": "low" | "medium" | "high" | "urgent"
+     "priority": "low" | "medium" | "high" | "urgent",
+     "recurrence": "daily" | "weekly" | "monthly" | null,
+     "is_checklist": boolean,
+     "subtasks": ["item 1", "item 2"] | null
   }}
 }}
 """
@@ -189,13 +192,9 @@ class GroupTaskManager:
             response = self.model.generate_content(prompt)
             text = response.text.strip()
             
-            # Clean markdown if present
-            if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
+            from app.utils.json_utils import safe_parse_json
+            return safe_parse_json(text)
             
-            return json.loads(text)
         except Exception as e:
             logger.error(f"AI analysis failed: {e}")
             return None
@@ -239,6 +238,19 @@ class GroupTaskManager:
             except:
                 pass
         
+        # Recurrence (Simple mapping for now)
+        recurrence_rule = None
+        rec_val = data.get("recurrence")
+        if rec_val:
+            if rec_val == "daily": recurrence_rule = "FREQ=DAILY"
+            elif rec_val == "weekly": recurrence_rule = "FREQ=WEEKLY"
+            elif rec_val == "monthly": recurrence_rule = "FREQ=MONTHLY"
+            
+        # Supervisor Mode detection: If assigned to someone else, creator is supervisor
+        is_supervisor = False
+        if assignee and creator and assignee.id != creator.id:
+            is_supervisor = True
+
         # Create task
         task = Task(
             tenant_id=tenant_id,
@@ -251,20 +263,42 @@ class GroupTaskManager:
             priority=priority,
             deadline=deadline,
             original_message_id=message_id,
-            original_message_text=message_text
+            original_message_text=message_text,
+            recurrence_rule=recurrence_rule,
+            is_supervisor_mode=is_supervisor
         )
         
         self.db.add(task)
         await self.db.flush()
         
+        # Handl Subtasks / Checklist
+        subtasks = data.get("subtasks")
+        if subtasks and isinstance(subtasks, list):
+             for item in subtasks:
+                 if isinstance(item, str):
+                     sub = Task(
+                         tenant_id=tenant_id,
+                         group_id=group.id,
+                         creator_id=creator.id,
+                         assignee_id=assignee.id if assignee else None,
+                         title=item,
+                         status=TaskStatus.NEW.value,
+                         parent_id=task.id, # Link to parent
+                         priority=priority
+                     )
+                     self.db.add(sub)
+             await self.db.flush()
+        
         # Build response message
         assignee_mention = f"@{assignee.whatsapp_phone}" if assignee and assignee.whatsapp_phone else (assignee_name or "вам")
         deadline_text = deadline.strftime("%d.%m.%Y") if deadline else "не указан"
         
+        super_note = " (👁️ Контроль)" if is_supervisor else ""
+        
         if self.language == "kz":
-            response_msg = f"✅ Тапсырма жазылды: {task_title}\n📅 Дедлайн: {deadline_text}\n👤 Жауапты: {assignee_mention}"
+            response_msg = f"✅ Тапсырма жазылды{super_note}: {task_title}\n📅 Дедлайн: {deadline_text}\n👤 Жауапты: {assignee_mention}"
         else:
-            response_msg = f"✅ Задача записана: {task_title}\n📅 Дедлайн: {deadline_text}\n👤 Ответственный: {assignee_mention}"
+            response_msg = f"✅ Задача записана{super_note}: {task_title}\n📅 Дедлайн: {deadline_text}\n👤 Ответственный: {assignee_mention}"
         
         return {
             "action": "task_created",
@@ -320,17 +354,33 @@ class GroupTaskManager:
             matching_task.mark_done()
         elif new_status == "in_progress":
             matching_task.mark_in_progress()
+            
+        await self.db.flush()
         
         if self.language == "kz":
             response_msg = f"🔥 Керемет! «{matching_task.title}» тапсырмасы жабылды."
         else:
             response_msg = f"🔥 Круто! Закрыл задачу «{matching_task.title}»."
+            
+        # Check for supervisor notification
+        notify_data = None
+        if new_status == "done" and matching_task.is_supervisor_mode and matching_task.creator_id:
+            # Load creator to get phone
+            stmt_creator = select(User).where(User.id == matching_task.creator_id)
+            creator_res = await self.db.execute(stmt_creator)
+            creator = creator_res.scalar_one_or_none()
+            if creator and creator.whatsapp_phone:
+                 notify_data = {
+                     "phone": creator.whatsapp_phone,
+                     "message": f"🤖 Уведомление: {sender.name} выполнил задачу «{matching_task.title}»."
+                 }
         
         return {
             "action": "task_updated",
             "task_id": str(matching_task.id),
             "new_status": new_status,
-            "response_message": response_msg
+            "response_message": response_msg,
+            "notify_supervisor": notify_data
         }
     
     async def _get_group_chat(self, tenant_id: UUID, chat_id: str) ->Optional[ GroupChat ]:

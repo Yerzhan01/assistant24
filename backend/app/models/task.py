@@ -140,9 +140,14 @@ class Task(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now, onupdate=datetime.now)
+    deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    # Reminder flag (Legacy - new system uses TaskReminder table)
+    reminder_sent: Mapped[bool] = mapped_column(Boolean, default=False)
     
     # Relationships
     tenant: Mapped["Tenant"] = relationship(back_populates="tasks")
@@ -155,6 +160,12 @@ class Task(Base):
         foreign_keys=[assignee_id],
         back_populates="assigned_tasks"
     )
+    subtasks: Mapped[list["Task"]] = relationship(
+        "Task",
+        backref="parent", # This creates a 'parent' attribute on the child task
+        remote_side=[id] # This tells SQLAlchemy that 'id' on THIS model is the remote side for the 'parent_id' on the related model
+    )
+    # reminders: Mapped[list["TaskReminder"]] = relationship("TaskReminder", back_populates="task")
     
     def __repr__(self) -> str:
         return f"<Task {self.title[:30]}... ({self.status})>"
@@ -167,6 +178,7 @@ class Task(Base):
     def mark_in_progress(self) -> None:
         """Mark task as in progress."""
         self.status = TaskStatus.IN_PROGRESS.value
+        self.completed_at = None
     
     @property
     def is_overdue(self) -> bool:
@@ -176,3 +188,4 @@ class Task(Base):
         if self.status == TaskStatus.DONE.value:
             return False
         return datetime.now() > self.deadline
+```
