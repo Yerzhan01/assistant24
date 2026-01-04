@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Callable, Awaitable
 from uuid import UUID
 
 import google.generativeai as genai
@@ -45,25 +45,15 @@ class AIRouter:
         key = api_key or settings.gemini_api_key
         if key:
             genai.configure(api_key=key)
-            # Configure generation with thinking level for Gemini 3
-            generation_config = {
-                "temperature": 1.0,  # Recommended for Gemini 3
-                "thinking_config": {
-                    "include_thoughts": True
-                }
-            }
-            # Add thinking level if specified (medium/high)
-            # mapping from config string to API constant or string
-            if self.thinking_level:
-                generation_config["thinking_config"]["include_thoughts"] = True
-                # Note: The old SDK might pass this as "thinking_level" inside thinking_config
-                # or we might need to use "thinking_budget" if level is not supported.
-                pass 
             
-            # Using direct dictionary structure for SDK 0.8.3
+            # Configuration for Intent Classification (Strict JSON)
+            # Temperature 0.0 for reproducibility
+            # Disable thoughts to prevent JSON corruption
             generation_config = {
-                "temperature": 1.0,
-                "thinking_config": {"include_thoughts": True} 
+                "temperature": 0.0,
+                "top_p": 0.8,
+                "top_k": 40,
+                # "thinking_config": {"include_thoughts": False} # Explicitly disable if supported, or omit
             }
 
             self.model = genai.GenerativeModel(
@@ -73,27 +63,36 @@ class AIRouter:
         else:
             self.model = None
     
-    def _safe_parse_json(self, text: str) -> Dict[str, Any]:
+    def _safe_parse_json(self, text: str) -> Optional[Dict[str, Any]]:
         """
         Safely parse JSON from Gemini response.
         Handles markdown code blocks, malformed JSON, and missing fields.
+        Robustly extracts { ... } from text.
         """
         if not text:
             return None
+            
+        import re
         
-        # Clean up markdown code blocks
+        # 1. Clean Markdown
         clean_text = text.strip()
-        if clean_text.startswith("```"):
-            # Extract content between ``` markers
-            parts = clean_text.split("```")
-            if len(parts) >= 2:
-                clean_text = parts[1]
-                # Remove "json" language identifier
-                if clean_text.startswith("json"):
-                    clean_text = clean_text[4:]
-                clean_text = clean_text.strip()
+        if "```" in clean_text:
+            # Extract content strictly between first ```(json)? and last ```
+            match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", clean_text)
+            if match:
+                clean_text = match.group(1).strip()
         
-        # Try parsing
+        # 2. Extract JSON object if text contains extra chatter
+        # Look for first '{' and last '}'
+        start = clean_text.find("{")
+        end = clean_text.rfind("}")
+        
+        if start != -1 and end != -1:
+            clean_text = clean_text[start:end+1]
+        elif start != -1: # Maybe missing closing brace?
+            clean_text = clean_text[start:] + "}" # Attempt repair
+            
+        # 3. Try parsing
         try:
             result = json.loads(clean_text)
             
@@ -102,30 +101,26 @@ class AIRouter:
                 logger.warning(f"Gemini returned non-dict JSON: {type(result)}")
                 return None
             
-            # Ensure 'intents' exists and is a list
+            # Ensure 'intents' exists (normalize single intent)
             if "intents" not in result or not isinstance(result.get("intents"), list):
-                # Maybe it's a single intent format
                 if "intent" in result:
                     result = {
-                        "reasoning": result.get("reasoning", "Single intent detected"),
+                        "reasoning": result.get("reasoning", "Normalized single intent"),
                         "intents": [result]
                     }
                 else:
                     logger.warning(f"Gemini returned JSON without intents: {result}")
                     return None
             
-            # Validate each intent has 'intent' field (not None)
+            # Validate intents
             valid_intents = []
             for intent in result.get("intents", []):
                 if isinstance(intent, dict) and intent.get("intent"):
                     valid_intents.append(intent)
-                else:
-                    logger.warning(f"Skipping invalid intent: {intent}")
             
             if not valid_intents:
-                logger.warning("No valid intents after filtering")
                 return None
-            
+                
             result["intents"] = valid_intents
             return result
             
@@ -153,22 +148,6 @@ class AIRouter:
             if kw in message_lower:
                 logger.info(f"WhatsApp priority override triggered by keyword: {kw}")
                 return self._force_whatsapp_intent(message, result)
-        
-        # Pattern: "напиши/отправь + имя + текст"
-        wa_action_words = ["напиши", "отправь", "скажи", "жаз", "жібер"]
-        
-        for action in wa_action_words:
-            if message_lower.startswith(action) or f" {action} " in f" {message_lower} ":
-                # Check that it's NOT about writing posts/content
-                post_keywords = ["пост", "статью", "текст для", "контент", "письмо"]
-                if not any(pk in message_lower for pk in post_keywords):
-                    # Check if whatsapp module is available
-                    if any(m.module_id == "whatsapp" for m in modules):
-                        # Check current classification - if it's NOT whatsapp, override
-                        current_intent = result.get("intents", [{}])[0].get("intent", "")
-                        if current_intent != "whatsapp":
-                            logger.info(f"WhatsApp priority override: {current_intent} -> whatsapp")
-                            return self._force_whatsapp_intent(message, result)
         
         return result
     
@@ -362,74 +341,62 @@ class AIRouter:
     ) -> Dict[str, Any]:
         """
         Classify user intent and extract data.
-        Supports multimodal input (Text + Image).
-        Returns dict with classification result + '_meta' key for usage stats.
+        Uses system_instruction for cleaner separation of roles.
         """
-        if not self.model:
-            # Fallback: keyword-based classification
-            logger.warning("Gemini model not initialized, using fallback classification")
-            return self._fallback_classify(message, modules)
-        
         module_ids = [m.module_id for m in modules]
         logger.info(f"Classifying intent with modules: {module_ids} for message: {message[:50]}...")
         
         system_prompt = self._build_system_prompt(modules, context, message_history)
         
-        # Prepare inputs
-        inputs = [
-            {"role": "user", "parts": [system_prompt]},
-            {"role": "model", "parts": ["Понял. Жду сообщение пользователя."]}
-        ]
-        
-        # If image provided, add it to user message
-        user_parts = [message]
-        if image_data:
-            from app.core.config import settings
-            import google.generativeai as genai
-            
-            # Additional Instruction for Vision
-            user_parts[0] = f"""
-            [IMAGE UPLOADED]
-            Пользователь отправил фото.
-            
-            Твоя задача:
-            1. Проанализируй изображение. Это чек, счет или документ?
-            2. Извлеки СУММУ, ДАТУ и КАТЕГОРИЮ (если это расход).
-            3. Если это чек -> Intent: 'expense' (finance).
-            4. Если это просто картинка без текста -> ответь что видишь.
-            
-            Текст пользователя: {message}
-            """
-            
-            try:
-                # Create Image Part
-                # Gemini expects dict: {'mime_type': 'image/jpeg', 'data': bytes}
-                image_part = {
-                    "mime_type": "image/jpeg", 
-                    "data": image_data
-                }
-                user_parts.append(image_part)
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).error(f"Failed to attach image to Gemini: {e}")
-                
-        inputs.append({"role": "user", "parts": user_parts})
+        # Instantiate model with system instruction (Per-request instance)
+        # This is cheap and ensures clean context without mixing roles in history
+        config = {
+            "temperature": 0.0,
+            "top_p": 0.8,
+            "top_k": 40
+        }
         
         try:
-            response = self.model.generate_content(inputs)
+            # Use instance model or create new one if system instruction supported (0.8.3+)
+            model = genai.GenerativeModel(
+                settings.gemini_model,
+                system_instruction=system_prompt,
+                generation_config=config
+            )
+            
+            # Prepare User Input
+            user_parts = [message]
+            
+            if image_data:
+                # Add Vision Instruction
+                user_parts[0] = f"""
+                [IMAGE UPLOADED]
+                Пользователь отправил фото.
+                1. Проанализируй изображение (чек, счет, документ?).
+                2. Извлеки СУММУ, ДАТУ, КАТЕГОРИЮ.
+                3. Если чек -> intent: 'expense'.
+                4. Если просто фото -> опиши.
+                Текущий текст: {message}
+                """
+                try:
+                    image_part = {"mime_type": "image/jpeg", "data": image_data}
+                    user_parts.append(image_part)
+                except Exception as e:
+                    logger.error(f"Failed to attach image: {e}")
+
+            # Generate (Single turn, no history needed as it's in system prompt)
+            response = await model.generate_content_async(user_parts)
             
             text = response.text.strip()
             logger.info(f"Gemini Raw Response: {text}")
             
-            # Use safe JSON parsing
             result = self._safe_parse_json(text)
             
             if result is None:
-                # Safe parsing failed - use fallback
                 logger.warning("Safe JSON parsing failed, using fallback classification")
                 return self._fallback_classify(message, modules)
             
-            # Attach metadata
+            # Metadata
             if hasattr(response, "usage_metadata"):
                 result["_meta"] = {
                     "prompt_tokens": response.usage_metadata.prompt_token_count,
@@ -437,14 +404,12 @@ class AIRouter:
                     "model": settings.gemini_model
                 }
             
-            # Apply WhatsApp priority override if needed
+            # Override
             result = self._apply_whatsapp_priority(message, result, modules)
-            
             return result
             
         except Exception as e:
             logger.error(f"Gemini classification error: {e}")
-            # Fallback on error
             return self._fallback_classify(message, modules)
     
     def _fallback_classify(
@@ -529,18 +494,12 @@ class AIRouter:
         on_status: Optional[Callable[[str], Awaitable[None]]] = None
     ) -> ModuleResponse:
         """
-        Process a user message end-to-end:
-        1. Retrieve RAG context
-        2. Classify intent
-        3. Route to appropriate module or negotiator
-        4. Store conversation as memory
-        5. Return response
-        
-        Args:
-            silent_response: If True, executes actions but does not save bot response to history or return text.
-            image_data: Optional image bytes for multimodal analysis (Vision).
-        
-        All steps are traced for debugging.
+        Process a user message end-to-end (Unified Pipeline 2.0).
+        1. Setup Tracing
+        2. Get Context & History
+        3. Classify Intent
+        4. Execute Modules
+        5. Save History
         """
         # Initialize tracing
         tracing = TracingService(self.db)
@@ -552,255 +511,79 @@ class AIRouter:
         )
         
         try:
-            # Use Agent Runtime for unified execution (Web & Telegram)
-            from app.agents.runtime import AgentRuntime
-            from app.models.chat import Message
-            from sqlalchemy import select, desc
+            # 1. Get Enabled Modules
+            trace.start_step("get_modules")
+            if not enabled_modules:
+                registry = get_registry()
+                enabled_modules = await registry.get_enabled_modules(self.db, tenant_id)
             
-            # Get message history (last 10 messages)
-            history_stmt = select(Message).where(
-                Message.tenant_id == tenant_id
-            ).order_by(desc(Message.created_at)).limit(10)
-            
-            result = await self.db.execute(history_stmt)
-            db_messages = result.scalars().all()
-            
-            # Convert to format for runtime
-            history = [{"role": "user" if m.is_user else "assistant", "content": m.content} for m in reversed(db_messages)]
-            
-            # Initialize Runtime
-            runtime = AgentRuntime(self.db, tenant_id, user_id, self.language)
-            
-            # Save User Message
-            if not silent_response:
-                user_msg = Message(
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    is_user=True,
-                    content=message,
-                    intent="web_message"
-                )
-                self.db.add(user_msg)
-                await self.db.commit() # Commit so Runtime can see it if needed
-            
-            # Execute
-            response_text = await runtime.run(message, history=history, on_status=on_status)
-            
-            # Save Assistant Response
-            if not silent_response:
-                bot_msg = Message(
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    is_user=False,
-                    content=response_text,
-                    intent="runtime_response"
-                )
-                self.db.add(bot_msg)
-                await self.db.commit()
-            
-            trace.set_final_response(response_text, success=True)
-            return ModuleResponse(success=True, message=response_text)
-            
-        except Exception as e:
-            trace.log_error(type(e).__name__, str(e))
-            return ModuleResponse(
-                success=False,
-                message=f"Произошла ошибка: {str(e)}"
-            )
-        finally:
-            await trace.save()
-    
-    async def _process_message_with_trace(
-        self,
-        message: str,
-        tenant_id: UUID,
-        user_id: Optional[UUID],
-        enabled_modules: Optional[List[BaseModule]],
-        trace: TraceContext,
-        silent_response: bool = False,
-        image_data: bytes = None
-    ) -> ModuleResponse:
-        """Internal method that processes message with tracing."""
-        # Get enabled modules
-        trace.start_step("get_modules")
-        if enabled_modules is None:
-            registry = get_registry()
-            enabled_modules = await registry.get_enabled_modules(self.db, tenant_id)
-        
-        trace.end_step("get_modules", {"count": len(enabled_modules) if enabled_modules else 0})
-        
-        if not enabled_modules:
-            trace.log_error("NoModules", "No enabled modules found")
-            return ModuleResponse(
-                success=False,
-                message=t("bot.error", self.language)
-            )
-        
-        # Get message history (last 5 messages)
-        message_history = []
-        try:
-            from sqlalchemy import select, desc
-            from app.models.chat import Message
-            
-            stmt = select(Message).where(
-                Message.tenant_id == tenant_id
-            ).order_by(desc(Message.created_at)).limit(5)
-            
-            result = await self.db.execute(stmt)
-            messages = result.scalars().all()
-            
-            # Convert to format for prompt (reverse order to be chronological)
-            for msg in reversed(messages):
-                message_history.append({
-                    "role": "user" if msg.is_user else "assistant",
-                    "content": msg.content
-                })
-        except Exception as e:
-            trace.log_step("get_history", error=str(e))
-        
-        # Get RAG context
-        trace.start_step("rag_retrieval")
-        context = await self.get_rag_context(tenant_id, message)
-        trace.end_step("rag_retrieval", {"context_length": len(context) if context else 0})
-        trace.log_rag(context)
-        
-        # Classify intent with context and history (now returns multi-intent format)
-        # Classify intent with context and history (now returns multi-intent format)
-        trace.start_step("gemini_classification")
-        classification = await self.classify_intent(
-            message=message, 
-            modules=enabled_modules, 
-            context=context, 
-            message_history=message_history,
-            image_data=image_data
-        )
-        gemini_duration = trace._step_elapsed_ms()
-        
-        # Log Gemini Usage
-        meta = classification.pop("_meta", None)
-        if meta:
-            trace.log_gemini_request(
-                prompt="[System Prompt Hidden]", # Too long to log fully
-                response_text=str(classification),
-                model=meta.get("model"),
-                prompt_tokens=meta.get("prompt_tokens"),
-                response_tokens=meta.get("response_tokens")
-            )
-            
-        trace.end_step("gemini_classification")
-        
-        # Extract reasoning for logging and tracing
-        reasoning = classification.get("reasoning", "")
-        logger.info(f"[{trace.trace_id}] AI Reasoning: {reasoning}")
-        
-        # Support both old single-intent and new multi-intent format
-        intents_list = classification.get("intents", [])
-        if not intents_list:
-            # Fallback to old format for backward compatibility
-            single_intent = classification.get("intent")
-            if single_intent:
-                intents_list = [{
-                    "intent": single_intent,
-                    "confidence": classification.get("confidence", 0.0),
-                    "data": classification.get("data", {})
-                }]
-        
-        # Log intent classification to trace
-        trace.log_intent_classification(intents_list, reasoning)
-        
-        if not intents_list:
-            trace.log_error("NoIntents", "Failed to classify any intents")
-            return ModuleResponse(
-                success=False,
-                message=t("bot.unknown_intent", self.language)
-            )
-        
-        # Process each intent and aggregate responses
-        all_responses = []
-        registry = get_registry()
-        
-        for intent_item in intents_list:
-            intent = intent_item.get("intent", "unknown")
-            confidence = intent_item.get("confidence", 0.0)
-            data = intent_item.get("data", {})
-            
-            # Skip low confidence or unknown intents
-            if intent == "unknown" or confidence < 0.3:
-                trace.log_step(f"skip_intent_{intent}", {"confidence": confidence, "reason": "low_confidence"})
-                continue
-            
-            trace.start_step(f"execute_{intent}")
-            
-            # Handle special intents
-            if intent == "schedule_meeting" and confidence >= 0.5:
-                resp = await self._handle_schedule_meeting(tenant_id, user_id, message, data)
-                trace.log_module_execution("schedule_meeting", resp.success, resp.message)
-                all_responses.append(resp.message)
-                continue
-            
-            if intent == "recall" and confidence >= 0.5:
-                resp = await self._handle_recall(tenant_id, message, context)
-                trace.log_module_execution("recall", resp.success, resp.message)
-                all_responses.append(resp.message)
-                continue
+            if not enabled_modules:
+                trace.log_error("NoModules", "No enabled modules found")
+                return ModuleResponse(success=False, message=t("bot.error", self.language))
+            trace.end_step("get_modules", {"count": len(enabled_modules)})
 
-            if intent == "cancel_meeting":
-                msg = "Өкінішке орай, мен кездесулерді мәтін арқылы өшіре алмаймын." if self.language == "kz" else "К сожалению, я пока не умею удалять встречи через текст."
-                trace.log_module_execution("cancel_meeting", False, msg, "Not implemented")
-                all_responses.append(msg)
-                continue
-            
-            # Find and execute module
-            module = registry.get(intent)
-            
-            if not module:
-                trace.end_step(f"execute_{intent}", error="Module not found")
-                continue
-            
-            # Check if module is in enabled list
-            if module not in enabled_modules:
-                trace.end_step(f"execute_{intent}", error="Module not enabled")
-                continue
-            
-            # Create module instance with DB session and process
-            module_instance = type(module)(self.db)
-            
-            # Inject context and original message into data for modules that need it
-            if context:
-                data["rag_context"] = context
-            
-            # IMPORTANT: Always pass original message so modules can access raw user input
-            data["original_message"] = message
-            data["query"] = message  # Some modules use 'query' key
-            
+            # 2. Get History (Last 5 messages)
+            message_history = []
+            trace.start_step("get_history")
             try:
-                response = await module_instance.process(
-                    data, 
-                    tenant_id, 
-                    user_id, 
-                    self.language
-                )
-                trace.log_module_execution(intent, response.success, response.message)
+                from sqlalchemy import select, desc
+                from app.models.chat import Message as ChatMessageModel # Renamed from Message to avoid conflict if any
+                
+                # Fetch recent history for context
+                stmt = select(ChatMessageModel).where(
+                    ChatMessageModel.tenant_id == tenant_id
+                ).order_by(desc(ChatMessageModel.created_at)).limit(5)
+                
+                result = await self.db.execute(stmt)
+                db_msgs = result.scalars().all()
+                for m in reversed(db_msgs):
+                    message_history.append({
+                        "role": "user" if m.is_user else "assistant", 
+                        "content": m.content
+                    })
+                trace.end_step("get_history", {"count": len(message_history)})
             except Exception as e:
-                trace.log_module_execution(intent, False, None, str(e))
-                response = ModuleResponse(success=False, message=f"Ошибка модуля {intent}: {str(e)}")
+                trace.log_step("get_history_error", error=str(e))
+                trace.end_step("get_history", {"error": str(e)})
+
+            # 3. RAG Retrieval
+            trace.start_step("rag_retrieval")
+            context = await self.get_rag_context(tenant_id, message)
+            trace.end_step("rag_retrieval", {"length": len(context)})
+            trace.log_rag(context)
             
-            # Always report result, even on failure (don't silently ignore errors)
-            if response.message:
-                all_responses.append(response.message)
-            elif not response.success:
-                # Module failed silently - inform user
-                module_name = module.info.get_name(self.language)
-                all_responses.append(f"⚠️ Не удалось выполнить: {module_name}")
-        
-        # Combine all responses
-        if not all_responses:
-            trace.log_error("NoResponses", "No modules produced a response")
-            return ModuleResponse(
-                success=False,
-                message=t("bot.unknown_intent", self.language)
+            # 4. Classification
+            if on_status: await on_status("Thinking...")
+            trace.start_step("classify")
+            classification = await self.classify_intent(
+                message, enabled_modules, context, message_history, image_data
             )
-        
+            
+            # Log Gemini Usage
+            meta = classification.pop("_meta", None)
+            if meta:
+                trace.log_gemini_request(
+                    prompt="[System Prompt Hidden]", # Too long to log fully
+                    response_text=str(classification),
+                    model=meta.get("model"),
+                    prompt_tokens=meta.get("prompt_tokens"),
+                    response_tokens=meta.get("response_tokens")
+                )
+            trace.end_step("classify")
+
+            # Log reasoning
+            reasoning = classification.get("reasoning", "")
+            intents = classification.get("intents", [])
+            trace.log_intent_classification(intents, reasoning)
+            logger.info(f"[{trace.trace_id}] AI Reasoning: {reasoning}")
+            
+            if not intents:
+                return ModuleResponse(success=False, message=t("bot.unknown_intent", self.language))
+
+            # 5. Execution
+            if on_status: await on_status("Executing...")
+            all_responses = []
+            registry = get_registry()
         combined_message = "\n\n".join(all_responses)
         trace.set_final_response(combined_message, success=True)
         
@@ -832,7 +615,7 @@ class AIRouter:
                     user_id=user_id,
                     is_user=False,
                     content=combined_message,
-                    intent=",".join([i.get("intent", "") for i in intents_list]),
+                    intent=",".join([i.get("intent", "") for i in intents]),
                     created_at=datetime.now() + timedelta(seconds=1)
                 )
                 self.db.add(bot_msg)
