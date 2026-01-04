@@ -17,6 +17,7 @@ from app.modules.birthday.module import BirthdayModule
 from app.modules.contract.module import ContractModule
 from app.modules.report.module import ReportModule
 from app.modules.debtor.module import DebtorModule
+from app.modules.whatsapp import WhatsAppModule
 
 from app.models.module_settings import TenantModuleSettings
 from app.modules.base import BaseModule, ModuleInfo

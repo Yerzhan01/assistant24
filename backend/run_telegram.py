@@ -50,6 +50,7 @@ async def main():
     from app.modules.task.module import TaskModule
     from app.modules.contacts.module import ContactsModule
     from app.modules.debtor.module import DebtorModule
+    from app.modules.whatsapp import WhatsAppModule
     
     registry.register(FinanceModule(None))
     registry.register(MeetingModule(None))
@@ -61,6 +62,7 @@ async def main():
     registry.register(TaskModule(None))
     registry.register(ContactsModule(None))
     registry.register(DebtorModule(None))
+    registry.register(WhatsAppModule(None))
     print(f"✅ Modules registered: {registry.get_module_ids()}")
 
     service = get_telegram_service()

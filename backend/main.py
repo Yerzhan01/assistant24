@@ -32,6 +32,7 @@ from app.modules.assistant.module import AssistantModule
 from app.modules.task.module import TaskModule
 from app.modules.contacts.module import ContactsModule
 from app.modules.debtor.module import DebtorModule
+from app.modules.whatsapp import WhatsAppModule
 
 
 @asynccontextmanager
@@ -59,6 +60,7 @@ async def lifespan(app: FastAPI):
     registry.register(TaskModule(None))
     registry.register(ContactsModule(None))
     registry.register(DebtorModule(None))
+    registry.register(WhatsAppModule(None))
     print(f"✅ Modules registered: {registry.get_module_ids()}")
     
     yield
