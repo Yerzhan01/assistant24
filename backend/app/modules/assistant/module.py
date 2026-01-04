@@ -62,8 +62,6 @@ class AssistantModule(BaseModule):
         # Prepare tools context
         tools_desc = """
 1. search_web(query: str): Поиск информации в Google/DuckDuckGo. Используй для поиска цен, фактов, мест, контактов.
-2. check_whatsapp(phone: str): Проверка наличия WhatsApp на номере. Номер должен быть чистым (без +, пробелов).
-3. send_whatsapp(phone: str, message: str): Отправка сообщения в WhatsApp. Используй ТОЛЬКО если пользователь явно попросил написать.
 """
         
         system_prompt = f"""
@@ -73,11 +71,8 @@ class AssistantModule(BaseModule):
 Контекст разговора (память):
 {rag_context}
 
-ПРАВИЛО БЕЗОПАСНОСТИ (WhatsApp):
-Перед использованием инструмента `send_whatsapp` ты ОБЯЗАН получить явное подтверждение от пользователя.
-1. Если ты нашел контакт и хочешь написать: СНАЧАЛА выведи `Final Answer` с текстом "Я нашел номер <номер>. Написать им: '<текст>'?".
-2. НЕ вызывай `send_whatsapp` в этом же шаге.
-3. Только если пользователь ответил "Да", "Отправляй" (см. запрос или контекст) — тогда вызывай инструмент.
+ПРАВИЛО:
+Не выдумывай факты. Пользуйся поиском.
 
 Инструменты:
 {tools_desc}
@@ -144,13 +139,9 @@ Final Answer: <твой ответ>
             if name == "search_web":
                 return AssistantTools.search_web(args.get("query", ""))
             elif name == "check_whatsapp":
-                if not instance_id or not token:
-                    return "Ошибка: WhatsApp не подключен в настройках."
-                return await AssistantTools.check_whatsapp(args.get("phone"), instance_id, token)
+                return "Функция проверки WhatsApp перенесена в отдельный модуль."
             elif name == "send_whatsapp":
-                if not instance_id or not token:
-                    return "Ошибка: WhatsApp не подключен в настройках."
-                return await AssistantTools.send_whatsapp(args.get("phone"), args.get("message"), instance_id, token)
+                return "Функция отправки сообщений перенесена в отдельный модуль WhatsApp."
             else:
                 return f"Неизвестный инструмент: {name}"
         except Exception as e:
