@@ -656,23 +656,24 @@ class AIRouter:
                     )
                     self.db.add(user_msg)
                     
-                    # Dual-Write: Unified Interaction (User)
-                    try:
-                        async with self.db.begin_nested():
-                            from app.models.interaction import UnifiedInteraction, InteractionSource, InteractionRole
-                            user_interaction = UnifiedInteraction(
-                                tenant_id=tenant_id,
-                                user_id=user_id,
-                                session_id=f"web:{user_id or 'anon'}",
-                                source=InteractionSource.WEB.value,
-                                role=InteractionRole.USER.value,
-                                content=message,
-                                metadata_={"intent": "user_input"},
-                                created_at=user_msg.created_at
-                            )
-                            self.db.add(user_interaction)
-                    except Exception as e:
-                        logger.error(f"Dual-Write User Failed: {e}")
+                    # Dual-Write: Unified Interaction (User) - DISABLED FOR DEBUGGING
+                    # try:
+                    #     async with self.db.begin_nested():
+                    #         from app.models.interaction import UnifiedInteraction, InteractionSource, InteractionRole
+                    #         user_interaction = UnifiedInteraction(
+                    #             tenant_id=tenant_id,
+                    #             user_id=user_id,
+                    #             session_id=f"web:{user_id or 'anon'}",
+                    #             source=InteractionSource.WEB.value,
+                    #             role=InteractionRole.USER.value,
+                    #             content=message,
+                    #             metadata_={"intent": "user_input"},
+                    #             created_at=user_msg.created_at
+                    #         )
+                    #         self.db.add(user_interaction)
+                    #         await self.db.flush()
+                    # except Exception as e:
+                    #     logger.error(f"Dual-Write User Failed: {e}")
 
                     # Bot response (1 second later to ensure order)
                     from datetime import timedelta
@@ -686,22 +687,23 @@ class AIRouter:
                     )
                     self.db.add(bot_msg)
                     
-                    # Dual-Write: Unified Interaction (Bot)
-                    try:
-                        async with self.db.begin_nested():
-                            bot_interaction = UnifiedInteraction(
-                                tenant_id=tenant_id,
-                                user_id=user_id,
-                                session_id=f"web:{user_id or 'anon'}",
-                                source=InteractionSource.WEB.value,
-                                role=InteractionRole.ASSISTANT.value,
-                                content=combined_message,
-                                metadata_={"intents": intents},
-                                created_at=bot_msg.created_at
-                            )
-                            self.db.add(bot_interaction)
-                    except Exception as e:
-                        logger.error(f"Dual-Write Bot Failed: {e}")
+                    # Dual-Write: Unified Interaction (Bot) - DISABLED FOR DEBUGGING
+                    # try:
+                    #     async with self.db.begin_nested():
+                    #         bot_interaction = UnifiedInteraction(
+                    #             tenant_id=tenant_id,
+                    #             user_id=user_id,
+                    #             session_id=f"web:{user_id or 'anon'}",
+                    #             source=InteractionSource.WEB.value,
+                    #             role=InteractionRole.ASSISTANT.value,
+                    #             content=combined_message,
+                    #             metadata_={"intents": intents},
+                    #             created_at=bot_msg.created_at
+                    #         )
+                    #         self.db.add(bot_interaction)
+                    #         await self.db.flush()
+                    # except Exception as e:
+                    #     logger.error(f"Dual-Write Bot Failed: {e}")
                     
                     # We rely on the caller (TelegramBotService) to commit, or we can flush here
                     await self.db.flush()
