@@ -34,4 +34,13 @@ class AssistantTools:
         except Exception as e:
             return f"Ошибка поиска: {str(e)}"
 
+    @staticmethod
+    async def check_whatsapp(phone: str, instance_id: str, token: str) -> str:
+        """Deprecated."""
+        return "Функция перенесена в WhatsApp модуль."
+
+    @staticmethod
+    async def send_whatsapp(phone: str, message: str, instance_id: str, token: str) -> str:
+        """Deprecated."""
+        return "Функция перенесена в WhatsApp модуль."
 
