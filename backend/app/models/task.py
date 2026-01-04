@@ -102,12 +102,7 @@ class Task(Base):
         default=TaskPriority.MEDIUM.value
     )
     
-    # Deadline
-    deadline:Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-        index=True
-    )
+
     
     # Original WhatsApp message ID (for reply)
     original_message_id:Mapped[Optional[str]] = mapped_column(
@@ -122,24 +117,13 @@ class Task(Base):
     )
     
     # Reminder settings
-    reminder_sent: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False
-    )
+
     
     # Completion time
-    completed_at:Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True
-    )
+
     
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now, onupdate=datetime.now)
     deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
@@ -188,4 +172,4 @@ class Task(Base):
         if self.status == TaskStatus.DONE.value:
             return False
         return datetime.now() > self.deadline
-```
+

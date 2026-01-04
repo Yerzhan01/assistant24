@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '20260105_task_v2'
-down_revision = '20260102_add_dnd'
+down_revision = '20260101_sys_events'
 branch_labels = None
 depends_on = None
 
@@ -46,11 +46,11 @@ def upgrade() -> None:
     op.add_column('tasks', sa.Column('is_supervisor_mode', sa.Boolean(), server_default='false', nullable=False))
     
     # 3. Add completed_at to tasks
-    op.add_column('tasks', sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True))
+
 
 
 def downgrade() -> None:
-    op.drop_column('tasks', 'completed_at')
+
     op.drop_column('tasks', 'is_supervisor_mode')
     op.drop_column('tasks', 'tags')
     op.drop_column('tasks', 'recurrence_rule')

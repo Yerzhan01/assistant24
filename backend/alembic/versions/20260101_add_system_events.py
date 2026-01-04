@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '20260101_sys_events'
-down_revision = '20260101_add_whatsapp_instances'
+down_revision = '20260102_add_dnd'
 branch_labels = None
 depends_on = None
 
