@@ -56,6 +56,120 @@ class AIRouter:
         else:
             self.model = None
     
+    def _safe_parse_json(self, text: str) -> Dict[str, Any]:
+        """
+        Safely parse JSON from Gemini response.
+        Handles markdown code blocks, malformed JSON, and missing fields.
+        """
+        if not text:
+            return None
+        
+        # Clean up markdown code blocks
+        clean_text = text.strip()
+        if clean_text.startswith("```"):
+            # Extract content between ``` markers
+            parts = clean_text.split("```")
+            if len(parts) >= 2:
+                clean_text = parts[1]
+                # Remove "json" language identifier
+                if clean_text.startswith("json"):
+                    clean_text = clean_text[4:]
+                clean_text = clean_text.strip()
+        
+        # Try parsing
+        try:
+            result = json.loads(clean_text)
+            
+            # Validate required structure
+            if not isinstance(result, dict):
+                logger.warning(f"Gemini returned non-dict JSON: {type(result)}")
+                return None
+            
+            # Ensure 'intents' exists and is a list
+            if "intents" not in result or not isinstance(result.get("intents"), list):
+                # Maybe it's a single intent format
+                if "intent" in result:
+                    result = {
+                        "reasoning": result.get("reasoning", "Single intent detected"),
+                        "intents": [result]
+                    }
+                else:
+                    logger.warning(f"Gemini returned JSON without intents: {result}")
+                    return None
+            
+            # Validate each intent has 'intent' field (not None)
+            valid_intents = []
+            for intent in result.get("intents", []):
+                if isinstance(intent, dict) and intent.get("intent"):
+                    valid_intents.append(intent)
+                else:
+                    logger.warning(f"Skipping invalid intent: {intent}")
+            
+            if not valid_intents:
+                logger.warning("No valid intents after filtering")
+                return None
+            
+            result["intents"] = valid_intents
+            return result
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse error: {e} | Text: {clean_text[:200]}")
+            return None
+    
+    def _apply_whatsapp_priority(self, message: str, result: Dict[str, Any], modules: List[BaseModule]) -> Dict[str, Any]:
+        """
+        Check if message clearly indicates WhatsApp intent.
+        If so, override Gemini's classification to ensure correct routing.
+        """
+        message_lower = message.lower().strip()
+        
+        # WhatsApp-specific keywords that MUST route to WhatsApp
+        wa_strong_keywords = [
+            "напиши в ватсап", "напиши в whatsapp", "напиши в уатсап",
+            "отправь в ватсап", "отправь в whatsapp", "отправь в уатсап",
+            "напиши ему", "напиши ей", "напиши ему в уатсап",
+            "через уатсап", "через ватсап", "через whatsapp"
+        ]
+        
+        # Check for strong keywords first
+        for kw in wa_strong_keywords:
+            if kw in message_lower:
+                logger.info(f"WhatsApp priority override triggered by keyword: {kw}")
+                return self._force_whatsapp_intent(message, result)
+        
+        # Pattern: "напиши/отправь + имя + текст"
+        wa_action_words = ["напиши", "отправь", "скажи", "жаз", "жібер"]
+        
+        for action in wa_action_words:
+            if message_lower.startswith(action) or f" {action} " in f" {message_lower} ":
+                # Check that it's NOT about writing posts/content
+                post_keywords = ["пост", "статью", "текст для", "контент", "письмо"]
+                if not any(pk in message_lower for pk in post_keywords):
+                    # Check if whatsapp module is available
+                    if any(m.module_id == "whatsapp" for m in modules):
+                        # Check current classification - if it's NOT whatsapp, override
+                        current_intent = result.get("intents", [{}])[0].get("intent", "")
+                        if current_intent != "whatsapp":
+                            logger.info(f"WhatsApp priority override: {current_intent} -> whatsapp")
+                            return self._force_whatsapp_intent(message, result)
+        
+        return result
+    
+    def _force_whatsapp_intent(self, message: str, original_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Force WhatsApp intent with original message for further processing."""
+        return {
+            "reasoning": f"WhatsApp priority override. Original: {original_result.get('reasoning', 'N/A')}",
+            "intents": [{
+                "intent": "whatsapp",
+                "confidence": 0.95,
+                "data": {
+                    "action": "send_message",
+                    "original_message": message
+                }
+            }],
+            "_meta": original_result.get("_meta", {})
+        }
+
     def _build_system_prompt(
         self, 
         modules: List[BaseModule],
@@ -290,16 +404,13 @@ class AIRouter:
             text = response.text.strip()
             logger.info(f"Gemini Raw Response: {text}")
             
-            # Clean up markdown code blocks if present
-            if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-                text = text.strip()
+            # Use safe JSON parsing
+            result = self._safe_parse_json(text)
             
-            result = json.loads(text)
-
-
+            if result is None:
+                # Safe parsing failed - use fallback
+                logger.warning("Safe JSON parsing failed, using fallback classification")
+                return self._fallback_classify(message, modules)
             
             # Attach metadata
             if hasattr(response, "usage_metadata"):
@@ -309,9 +420,13 @@ class AIRouter:
                     "model": settings.gemini_model
                 }
             
+            # Apply WhatsApp priority override if needed
+            result = self._apply_whatsapp_priority(message, result, modules)
+            
             return result
             
         except Exception as e:
+            logger.error(f"Gemini classification error: {e}")
             # Fallback on error
             return self._fallback_classify(message, modules)
     
