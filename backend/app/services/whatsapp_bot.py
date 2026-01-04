@@ -736,7 +736,88 @@ class WhatsAppBotService:
         """Handle instance state change."""
         state = webhook_data.get("stateInstance")
         logger.info(f"Tenant {tenant.id} WhatsApp state: {state}")
+        
+        # Sync groups when WhatsApp becomes authorized
+        if state == "authorized":
+            try:
+                async with async_session_maker() as db:
+                    await self.sync_groups_to_db(tenant, db)
+            except Exception as e:
+                logger.error(f"Failed to sync groups for tenant {tenant.id}: {e}")
+        
         return {"status": "ok", "state": state}
+    
+    async def sync_groups_to_db(
+        self,
+        tenant: Tenant,
+        db: AsyncSession
+    ) -> int:
+        """
+        Sync all WhatsApp groups to database.
+        New groups are created with is_active=False (archived by default).
+        Returns count of synced groups.
+        """
+        from app.models.group_chat import GroupChat
+        
+        logger.info(f"Syncing WhatsApp groups for tenant {tenant.id}")
+        
+        try:
+            # Get all chats from WhatsApp
+            chats = await self.get_chats(
+                tenant.greenapi_instance_id,
+                tenant.greenapi_token
+            )
+            
+            if not chats:
+                logger.info("No chats found")
+                return 0
+            
+            # Filter only groups (@g.us)
+            groups = [c for c in chats if c.get("id", "").endswith("@g.us")]
+            logger.info(f"Found {len(groups)} groups to sync")
+            
+            synced_count = 0
+            
+            for group in groups:
+                group_id = group.get("id", "")
+                group_name = group.get("name", "") or f"Group {group_id[:15]}"
+                
+                # Check if group already exists
+                existing = await db.execute(
+                    select(GroupChat).where(
+                        GroupChat.whatsapp_chat_id == group_id,
+                        GroupChat.tenant_id == tenant.id
+                    )
+                )
+                existing_group = existing.scalar_one_or_none()
+                
+                if existing_group:
+                    # Update name if changed
+                    if existing_group.name != group_name:
+                        existing_group.name = group_name
+                        logger.debug(f"Updated group name: {group_name}")
+                else:
+                    # Create new group (archived by default)
+                    new_group = GroupChat(
+                        tenant_id=tenant.id,
+                        whatsapp_chat_id=group_id,
+                        name=group_name,
+                        is_active=False,  # Archived by default
+                        task_extraction_enabled=False,
+                        silent_mode=True
+                    )
+                    db.add(new_group)
+                    synced_count += 1
+                    logger.info(f"Created new group: {group_name}")
+            
+            await db.commit()
+            logger.info(f"Synced {synced_count} new groups for tenant {tenant.id}")
+            return synced_count
+            
+        except Exception as e:
+            logger.error(f"Error syncing groups: {e}")
+            await db.rollback()
+            raise
     
     async def _handle_incoming_message(
         self,
