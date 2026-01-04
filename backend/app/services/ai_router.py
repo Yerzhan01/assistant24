@@ -299,33 +299,7 @@ class AIRouter:
             
             result = json.loads(text)
 
-            # HARD OVERRIDE: Check if user wants to send WhatsApp message but AI failed
-            try:
-                msg_lower = message.lower().strip()
-                wa_keywords = ["напиши", "отправь", "скажи", "жаз", "жібер", "write", "send"]
-                
-                # If message contains messaging keywords (not just starts with)
-                is_messaging_request = any(kw in msg_lower for kw in wa_keywords)
-                
-                current_intents = result.get("intents", [])
-                first_intent = current_intents[0].get("intent") if current_intents else "unknown"
-                
-                # Check if whatsapp module is enabled
-                whatsapp_enabled = any(m.module_id == "whatsapp" for m in modules)
 
-                if is_messaging_request and first_intent != "whatsapp" and whatsapp_enabled:
-                    logger.warning(f"Overriding intent '{first_intent}' -> 'whatsapp' based on keywords")
-                    result["intents"] = [{
-                        "intent": "whatsapp",
-                        "confidence": 1.0,
-                        "data": {
-                            "action": "send_message",
-                            "content": message,
-                            "original_message": message
-                        }
-                    }]
-            except Exception as e:
-                logger.error(f"Error in intent override logic: {e}")
             
             # Attach metadata
             if hasattr(response, "usage_metadata"):
