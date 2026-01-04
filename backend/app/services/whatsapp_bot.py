@@ -49,6 +49,10 @@ class WhatsAppBotService:
     
     def _format_chat_id(self, phone: str, is_group: bool = False) -> str:
         """Format phone number to chat ID."""
+        # If already formatted with @c.us or @g.us, return as-is
+        if "@c.us" in phone or "@g.us" in phone:
+            return phone
+        
         # Remove + and any spaces/dashes
         clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
         suffix = "@g.us" if is_group else "@c.us"
@@ -142,6 +146,8 @@ class WhatsAppBotService:
         url = self._build_url(instance_id, token, "sendMessage")
         chat_id = self._format_chat_id(phone)
         
+        logger.info(f"📤 Sending WhatsApp to {chat_id}: '{message[:50]}...'")
+        
         payload = {
             "chatId": chat_id,
             "message": message,
@@ -153,7 +159,15 @@ class WhatsAppBotService:
         
         async with self._get_client() as client:
             response = await client.post(url, json=payload)
-            return response.json()
+            result = response.json()
+            
+            # Log result for debugging
+            if "idMessage" in result:
+                logger.info(f"✅ Message sent, id: {result['idMessage']}")
+            else:
+                logger.warning(f"⚠️ WhatsApp API response: {result}")
+            
+            return result
     
     async def send_file_by_url(
         self,
