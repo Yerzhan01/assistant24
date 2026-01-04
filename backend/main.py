@@ -28,11 +28,11 @@ from app.modules.contract.module import ContractModule
 from app.modules.ideas.module import IdeasModule
 from app.modules.birthday.module import BirthdayModule
 from app.modules.report.module import ReportModule
-# from app.modules.assistant.module import AssistantModule
+from app.modules.assistant.module import AssistantModule
 from app.modules.task.module import TaskModule
 from app.modules.contacts.module import ContactsModule
 from app.modules.debtor.module import DebtorModule
-# from app.modules.whatsapp import WhatsAppModule
+from app.modules.whatsapp import WhatsAppModule
 
 
 @asynccontextmanager
@@ -56,11 +56,11 @@ async def lifespan(app: FastAPI):
     registry.register(IdeasModule(None))
     registry.register(BirthdayModule(None))
     registry.register(ReportModule(None))
-    # registry.register(AssistantModule(None))
+    registry.register(AssistantModule(None))
     registry.register(TaskModule(None))
     registry.register(ContactsModule(None))
     registry.register(DebtorModule(None))
-    # registry.register(WhatsAppModule(None))
+    registry.register(WhatsAppModule(None))
     print(f"✅ Modules registered: {registry.get_module_ids()}")
     
     yield
