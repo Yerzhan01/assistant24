@@ -627,6 +627,11 @@ class AIRouter:
                         elif not resp.success:
                              all_responses.append(f"⚠️ Ошибка модуля {intent}")
                     except Exception as e:
+                        # CRITICAL: Rollback to clear potentially corrupted transaction
+                        try:
+                            await self.db.rollback()
+                        except Exception:
+                            pass  # Ignore rollback errors
                         logger.error(f"Module {intent} failed: {e}")
                         all_responses.append(f"❌ Ошибка: {str(e)}")
                 
