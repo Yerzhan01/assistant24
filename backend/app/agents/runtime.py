@@ -298,6 +298,13 @@ class AgentRuntime:
                 context_parts.append(f"Previous results: {'; '.join(accumulated_results)}")
             context_str = "\n".join(context_parts)
             
+            # GLOBAL FIX: Reset transaction state before EACH agent execution
+            # This ensures a clean transaction even if previous operations failed
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass  # Session might not have an active transaction
+            
             response: AgentResponse = await current_agent.run(
                 message=user_message,
                 context=context_str
