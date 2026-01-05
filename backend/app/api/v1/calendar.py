@@ -94,19 +94,28 @@ class FeedUrlResponse(BaseModel):
 
 @router.get("/events", response_model=List[EventResponse])
 async def list_events(
-    start: datetime = Query(..., description="Start date for range"),
-    end: datetime = Query(..., description="End date for range"),
+    start: str = Query(..., description="Start date for range (ISO format or YYYY-MM-DD)"),
+    end: str = Query(..., description="End date for range (ISO format or YYYY-MM-DD)"),
     include_cancelled: bool = Query(False),
     tenant=Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
     """Get events within a date range."""
     try:
+        # Parse dates flexibly - accept both date-only and full datetime
+        from dateutil import parser as date_parser
+        start_date = date_parser.parse(start)
+        end_date = date_parser.parse(end)
+        
+        # If end is date-only (no time), set to end of day
+        if end_date.hour == 0 and end_date.minute == 0 and end_date.second == 0:
+            end_date = end_date.replace(hour=23, minute=59, second=59)
+        
         service = CalendarService(db)
         return await service.get_events(
             tenant_id=tenant.id,
-            start_date=start,
-            end_date=end,
+            start_date=start_date,
+            end_date=end_date,
             include_cancelled=include_cancelled
         )
     except Exception as e:
