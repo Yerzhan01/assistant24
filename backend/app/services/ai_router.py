@@ -587,6 +587,15 @@ class AIRouter:
 
             # 5. Execution
             if on_status: await on_status("Executing...")
+            
+            # STRATEGIC FIX: Reset transaction before writes 
+            # Read operations (history, RAG) might have failed silently, 
+            # corrupting the transaction. This ensures modules start clean.
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass  # OK if no active transaction
+            
             all_responses = []
             registry = get_registry()
             for item in intents:
