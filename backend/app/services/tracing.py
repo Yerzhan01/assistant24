@@ -207,6 +207,11 @@ class TraceContext:
                 f"({self.trace.total_duration_ms}ms)"
             )
         except Exception as e:
+            # CRITICAL: Rollback to clear the corrupted transaction state
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass  # Ignore rollback errors
             logger.error(f"[{self.trace_id}] Failed to save trace: {e}")
 
 

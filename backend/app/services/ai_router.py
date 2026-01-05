@@ -543,6 +543,11 @@ class AIRouter:
                     })
                 trace.end_step("get_history", {"count": len(message_history)})
             except Exception as e:
+                # CRITICAL: Rollback to clear the corrupted transaction state
+                try:
+                    await self.db.rollback()
+                except Exception:
+                    pass  # Ignore rollback errors
                 trace.log_step("get_history_error", error=str(e))
                 trace.end_step("get_history", {"error": str(e)})
 
@@ -708,6 +713,11 @@ class AIRouter:
                     # We rely on the caller (TelegramBotService) to commit, or we can flush here
                     await self.db.flush()
                 except Exception as e:
+                    # CRITICAL: Rollback to clear the corrupted transaction state
+                    try:
+                        await self.db.rollback()
+                    except Exception:
+                        pass  # Ignore rollback errors
                     import logging
                     logging.getLogger(__name__).error(f"Failed to save chat history: {e}")
             
