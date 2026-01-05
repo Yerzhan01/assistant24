@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List
 from uuid import UUID
 
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.meeting import Meeting, RecurrenceType, MeetingStatus
