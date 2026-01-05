@@ -441,7 +441,7 @@ class TelegramBotService:
                 chat_id = message.chat.id
                 
                 # Status Message
-                status_msg = await bot.send_message(chat_id=chat_id, text="⏳ Agent System Starting...")
+                status_msg = await bot.send_message(chat_id=chat_id, text="⏳ Обрабатываю...")
                 
                 async def update_status(msg: str):
                     try:
@@ -453,45 +453,23 @@ class TelegramBotService:
                     except Exception:
                         pass # Ignore if message not modified or error
                 
-                # Use Agent Runtime with history
-                from app.agents.runtime import AgentRuntime
-                runtime = AgentRuntime(db, tenant.id, user.id, lang)
+                # UNIFIED: Use AIRouter instead of AgentRuntime
+                # AIRouter is the same system used by Web and WhatsApp
+                from app.services.ai_router import AIRouter
+                router = AIRouter(db, language=lang)
                 
-                # Load chat history from DB (persistent storage)
-                from app.models.chat import Message
-                from sqlalchemy import select, desc
-                
-                history_stmt = select(Message).where(
-                    Message.tenant_id == tenant.id
-                ).order_by(Message.created_at.desc()).limit(MAX_HISTORY_LENGTH)
-                history_result = await db.execute(history_stmt)
-                db_messages = history_result.scalars().all()
-                
-                # Convert to list format (reverse to chronological order)
-                history = [{"role": "user" if m.is_user else "assistant", "content": m.content} for m in reversed(db_messages)]
-                
-                # Add user message to history and DB
-                history.append({"role": "user", "content": message_text})
-                user_msg = Message(
-                    tenant_id=tenant.id,
-                    is_user=True,
-                    content=message_text,
-                    intent="telegram_message"
-                )
-                db.add(user_msg)
-                
-                response_text = await runtime.run(message_text, history=history, on_status=update_status)
-                
-                # Add assistant response to history and DB
-                history.append({"role": "assistant", "content": response_text})
-                assistant_msg = Message(
-                    tenant_id=tenant.id,
-                    is_user=False,
-                    content=response_text,
-                    intent="assistant_reply"
-                )
-                db.add(assistant_msg)
-                await db.commit()
+                try:
+                    response = await router.process_message(
+                        tenant_id=tenant.id,
+                        user_id=user.id,
+                        message=message_text,
+                        on_status=update_status
+                    )
+                    response_text = response.message if response.message else "Не удалось обработать запрос."
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Telegram AIRouter error: {e}")
+                    response_text = f"❌ Ошибка: {str(e)}"
                 
                 # Cleanup status message
                 try:
@@ -512,8 +490,6 @@ class TelegramBotService:
                         chat_id=chat_id,
                         text=response_text
                     )
-            
-            await db.commit()
             return {"status": "ok"}
     
     async def _handle_callback(
