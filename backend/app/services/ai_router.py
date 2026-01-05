@@ -620,12 +620,8 @@ class AIRouter:
                     data["rag_context"] = context
                     data["original_message"] = message
                     
-                    # GLOBAL FIX: Reset transaction state before EACH module execution
-                    # This ensures a clean transaction even if previous operations failed
-                    try:
-                        await self.db.rollback()
-                    except Exception:
-                        pass  # Session might not have an active transaction
+                    # NOTE: Removed preemptive rollback - it was causing module data to be lost
+                    # Rollback only happens on error (see except block below)
                     
                     try:
                         resp = await instance.process(data, tenant_id, user_id, self.language)
