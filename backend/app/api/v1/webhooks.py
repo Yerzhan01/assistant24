@@ -49,8 +49,16 @@ async def whatsapp_webhook(
 ) -> Dict[str, str]:
     """Handle incoming GreenAPI webhook for a specific tenant."""
     try:
+        # TODO: Implement webhook signature validation for production
+        # When tenant.whatsapp_webhook_secret is configured:
+        #   from app.core.security import verify_webhook_signature
+        #   signature = request.headers.get("X-Webhook-Signature")
+        #   body = await request.body()
+        #   if not verify_webhook_signature(body, signature, tenant.whatsapp_webhook_secret):
+        #       raise HTTPException(401, "Invalid webhook signature")
+
         webhook_data = await request.json()
-        
+
         # Idempotency Check
         # GreenAPI webhooks usually have typeWebhook and idMessage
         type_webhook = webhook_data.get("typeWebhook", "unknown")

@@ -51,6 +51,7 @@ class Tenant(Base):
     greenapi_instance_id:Mapped[Optional[str]] = mapped_column(String(64))
     greenapi_token:Mapped[Optional[str]] = mapped_column(Text)
     whatsapp_phone:Mapped[Optional[str]] = mapped_column(String(20))
+    whatsapp_webhook_secret:Mapped[Optional[str]] = mapped_column(String(128))  # For webhook signature validation
     
     # AI Settings
     gemini_api_key:Mapped[Optional[str]] = mapped_column(Text)

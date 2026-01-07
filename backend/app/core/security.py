@@ -2,6 +2,8 @@ from __future__ import annotations
 """Security utilities for authentication and authorization."""
 from datetime import datetime, timedelta, timezone
 from typing import Any, Union, Optional, Dict
+import hmac
+import hashlib
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -53,3 +55,55 @@ def decode_access_token(token: str) ->Optional[ Dict[str, Any] ]:
     except JWTError as e:
         logger.error(f"JWT Decode Error: {e}")
         return None
+
+
+def verify_webhook_signature(
+    payload: bytes,
+    signature: str,
+    secret: str,
+    algorithm: str = "sha256"
+) -> bool:
+    """
+    Verify webhook signature using HMAC.
+
+    Args:
+        payload: Raw webhook body as bytes
+        signature: Signature from webhook header
+        secret: Webhook secret key
+        algorithm: Hash algorithm (default: sha256)
+
+    Returns:
+        True if signature is valid, False otherwise
+
+    Example:
+        signature = request.headers.get("X-Webhook-Signature")
+        body = await request.body()
+        is_valid = verify_webhook_signature(body, signature, tenant.webhook_secret)
+    """
+    if not signature or not secret:
+        logger.warning("Missing signature or secret for webhook validation")
+        return False
+
+    try:
+        # Compute expected signature
+        if algorithm == "sha256":
+            expected = hmac.new(
+                secret.encode('utf-8'),
+                payload,
+                hashlib.sha256
+            ).hexdigest()
+        elif algorithm == "sha1":
+            expected = hmac.new(
+                secret.encode('utf-8'),
+                payload,
+                hashlib.sha1
+            ).hexdigest()
+        else:
+            raise ValueError(f"Unsupported algorithm: {algorithm}")
+
+        # Constant-time comparison to prevent timing attacks
+        return hmac.compare_digest(expected, signature)
+
+    except Exception as e:
+        logger.error(f"Webhook signature verification failed: {e}", exc_info=True)
+        return False
