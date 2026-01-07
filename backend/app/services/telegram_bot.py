@@ -466,6 +466,8 @@ class TelegramBotService:
                         on_status=update_status
                     )
                     response_text = response.message if response.message else "Не удалось обработать запрос."
+                    # Commit DB changes from modules
+                    await db.commit()
                 except Exception as e:
                     import logging
                     logging.getLogger(__name__).error(f"Telegram AIRouter error: {e}")
