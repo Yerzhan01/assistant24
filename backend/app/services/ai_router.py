@@ -543,11 +543,9 @@ class AIRouter:
                     })
                 trace.end_step("get_history", {"count": len(message_history)})
             except Exception as e:
-                # CRITICAL: Rollback to clear the corrupted transaction state
-                try:
-                    await self.db.rollback()
-                except Exception:
-                    pass  # Ignore rollback errors
+                # NOTE: History fetch is a READ operation - no rollback needed
+                # Errors here should not corrupt the transaction state
+                logger.warning(f"Failed to fetch history: {e}", exc_info=True)
                 trace.log_step("get_history_error", error=str(e))
                 trace.end_step("get_history", {"error": str(e)})
 
@@ -587,15 +585,11 @@ class AIRouter:
 
             # 5. Execution
             if on_status: await on_status("Executing...")
-            
-            # STRATEGIC FIX: Reset transaction before writes 
-            # Read operations (history, RAG) might have failed silently, 
-            # corrupting the transaction. This ensures modules start clean.
-            try:
-                await self.db.rollback()
-            except Exception:
-                pass  # OK if no active transaction
-            
+
+            # NOTE: Removed preemptive rollback that was causing data loss.
+            # With autoflush=True in database.py, changes are automatically flushed
+            # before queries, eliminating the need for manual transaction resets.
+
             all_responses = []
             registry = get_registry()
             for item in intents:
@@ -639,12 +633,18 @@ class AIRouter:
                         elif not resp.success:
                              all_responses.append(f"⚠️ Ошибка модуля {intent}")
                     except Exception as e:
-                        # CRITICAL: Rollback to clear potentially corrupted transaction
-                        try:
-                            await self.db.rollback()
-                        except Exception:
-                            pass  # Ignore rollback errors
-                        logger.error(f"Module {intent} failed: {e}")
+                        # NOTE: Removed rollback - let get_db() handle transaction cleanup
+                        # Rolling back here would discard ALL previous modules' work, not just this one
+                        logger.error(
+                            f"Module execution failed",
+                            extra={
+                                "module": intent,
+                                "tenant_id": str(tenant_id),
+                                "error": str(e),
+                                "trace_id": trace.id
+                            },
+                            exc_info=True
+                        )
                         all_responses.append(f"❌ Ошибка: {str(e)}")
                 
                 trace.end_step(f"exec_{intent}")
@@ -730,13 +730,13 @@ class AIRouter:
                     # We rely on the caller (TelegramBotService) to commit, or we can flush here
                     await self.db.flush()
                 except Exception as e:
-                    # CRITICAL: Rollback to clear the corrupted transaction state
-                    try:
-                        await self.db.rollback()
-                    except Exception:
-                        pass  # Ignore rollback errors
-                    import logging
-                    logging.getLogger(__name__).error(f"Failed to save chat history: {e}")
+                    # NOTE: Chat history save failure should not discard module execution results
+                    # The main transaction (module writes) is more important than chat logging
+                    logger.error(
+                        f"Failed to save chat history",
+                        extra={"tenant_id": str(tenant_id), "error": str(e)},
+                        exc_info=True
+                    )
             
             return ModuleResponse(success=True, message=combined_message)
 
