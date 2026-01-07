@@ -592,6 +592,9 @@ class AIRouter:
             intents = classification.get("intents", [])
             trace.log_intent_classification(intents, reasoning)
             logger.info(f"[{trace.trace_id}] AI Reasoning: {reasoning}")
+            logger.info(f"[{trace.trace_id}] Intents: {intents}")
+            print(f"🎯 INTENTS: {intents}")
+            print(f"💭 REASONING: {reasoning}")
             
             # If no intents or unknown - route to assistant for general conversation
             if not intents:
