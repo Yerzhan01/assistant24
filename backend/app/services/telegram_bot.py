@@ -22,16 +22,13 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.services.ai_router import AIRouter
 from app.modules.registry import get_registry
-from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 router = Router()
 
-# In-memory chat history for context preservation
-# Key: chat_id, Value: list of {role, content} dicts
-_chat_history: Dict[int, list] = defaultdict(list)
-MAX_HISTORY_LENGTH = 100  # Keep last 100 messages per chat
-
+# NOTE: Removed in-memory _chat_history global state (race condition risk).
+# Chat history is now stored in database via ChatMessage model.
+# See AIRouter.process_message() which handles history persistence.
 
 # ==================== Button Definitions ====================
 
