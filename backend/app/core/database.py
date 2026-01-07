@@ -21,7 +21,7 @@ async_session_maker = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
     autocommit=False,
-    autoflush=False,
+    autoflush=True,  # CRITICAL FIX: Auto-flush changes before queries to prevent data loss
 )
 
 
