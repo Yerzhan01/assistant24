@@ -1,0 +1,41 @@
+# Environment
+.env
+.venv
+venv/
+__pycache__/
+*.pyc
+
+# IDEs
+.vscode/
+.idea/
+
+# Node
+node_modules/
+dist/
+build/
+npm-debug.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+pgdata/
+redis_data/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+*_logs.txt
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.db
+celerybeat.pid
+
+# Deployment artifacts
+install.sh
+project.tar.gz
+deploy_helper.py
+scp_helper.py
