@@ -42,7 +42,9 @@ class ContactsModule(BaseModule):
         try:
             action = intent_data.get("action", "create")
             
-            if action == "find":
+            if action == "list":
+                return await self._list_contacts(tenant_id, language)
+            elif action == "find":
                 return await self._find_contact(intent_data, tenant_id, language)
             elif action == "create":
                 return await self._create_contact(intent_data, tenant_id, language)
@@ -167,6 +169,38 @@ class ContactsModule(BaseModule):
         if language == "kz":
             return ModuleResponse(success=True, message=f"📊 Барлығы {count} байланыс бар.")
         return ModuleResponse(success=True, message=f"📊 Всего у вас {count} контактов.")
+
+
+    async def _list_contacts(
+        self,
+        tenant_id: UUID,
+        language: str
+    ) -> ModuleResponse:
+        """List all contacts."""
+        from sqlalchemy import select
+        from app.models.contact import Contact
+        
+        result = await self.db.execute(
+            select(Contact).where(Contact.tenant_id == tenant_id).order_by(Contact.name).limit(50)
+        )
+        contacts = result.scalars().all()
+        
+        if not contacts:
+            if language == "kz":
+                return ModuleResponse(success=True, message="📋 Контактар жоқ.")
+            return ModuleResponse(success=True, message="📋 Контактов нет.")
+        
+        if language == "kz":
+            message = f"📋 Контактар ({len(contacts)}):\n"
+        else:
+            message = f"📋 Контакты ({len(contacts)}):\n"
+        
+        for c in contacts:
+            message += f"\n👤 {c.name}"
+            if c.phone:
+                message += f" — {c.phone}"
+        
+        return ModuleResponse(success=True, message=message)
 
     async def _find_contact(
         self, 
